@@ -34,6 +34,7 @@ logger = get_logger("api")
 # ─── Self-Healing Startup Check ────────────────────────────────────────────────
 # Render/Heroku container builds may discard ignored files. If models or comparison
 # results are missing on startup, dynamically trigger the ML pipeline to train them.
+STARTUP_ERROR = None
 try:
     comparison_path = os.path.join(RESULTS_DIR, "model_comparison.json")
     scaler_path = os.path.join(MODELS_DIR, "scaler.joblib")
@@ -43,6 +44,11 @@ try:
         run_pipeline()
         logger.info("✅ ML Pipeline training completed successfully on startup.")
 except Exception as e:
+    import traceback
+    STARTUP_ERROR = {
+        "error": str(e),
+        "traceback": traceback.format_exc()
+    }
     logger.error(f"❌ Failed to execute self-healing pipeline: {str(e)}")
 
 app = FastAPI(
@@ -315,6 +321,33 @@ def run_prediction(payload: InferenceRequest):
             DATA_CONFIG["class_names"][0]: round(probabilities[0] * 100, 2),
             DATA_CONFIG["class_names"][1]: round(probabilities[1] * 100, 2)
         }
+    }
+
+
+@app.get("/api/debug")
+def get_debug_info():
+    log_path = os.path.join(PROJECT_ROOT, "logs", "pipeline.log")
+    log_contents = ""
+    if os.path.exists(log_path):
+        try:
+            with open(log_path, "r") as f:
+                log_contents = f.read()[-5000:] # Last 5000 chars
+        except Exception:
+            pass
+            
+    # Check what files exist
+    files_check = {
+        "model_comparison_exists": os.path.exists(os.path.join(RESULTS_DIR, "model_comparison.json")),
+        "scaler_exists": os.path.exists(os.path.join(MODELS_DIR, "scaler.joblib")),
+        "model_manifest_exists": os.path.exists(os.path.join(MODELS_DIR, "model_manifest.json")),
+        "figures_dir_exists": os.path.exists(FIGURES_DIR),
+        "figures_list": os.listdir(FIGURES_DIR) if os.path.exists(FIGURES_DIR) else []
+    }
+            
+    return {
+        "startup_error": STARTUP_ERROR,
+        "files_check": files_check,
+        "log_tail": log_contents
     }
 
 
