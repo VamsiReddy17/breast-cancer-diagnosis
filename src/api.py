@@ -31,6 +31,20 @@ from src.utils import get_logger, load_json
 
 logger = get_logger("api")
 
+# ─── Self-Healing Startup Check ────────────────────────────────────────────────
+# Render/Heroku container builds may discard ignored files. If models or comparison
+# results are missing on startup, dynamically trigger the ML pipeline to train them.
+try:
+    comparison_path = os.path.join(RESULTS_DIR, "model_comparison.json")
+    scaler_path = os.path.join(MODELS_DIR, "scaler.joblib")
+    if not os.path.exists(comparison_path) or not os.path.exists(scaler_path):
+        logger.info("⚠️ Deployed model assets or comparisons are missing. Initializing pipeline...")
+        from src.pipeline import run_pipeline
+        run_pipeline()
+        logger.info("✅ ML Pipeline training completed successfully on startup.")
+except Exception as e:
+    logger.error(f"❌ Failed to execute self-healing pipeline: {str(e)}")
+
 app = FastAPI(
     title="Breast Cancer Diagnosis API",
     description="Backend API for data exploration, model evaluation, and inference.",
