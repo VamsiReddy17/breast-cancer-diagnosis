@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# Node
+node_modules/
+frontend/node_modules/
+frontend/dist/
+.eslintcache
+
+# Logs & Data outputs (optional, but good practice to keep clean)
+logs/*.log
+logs/pipeline.log
+reports/figures/*.png
+reports/results/*.csv
+reports/results/*.json
+reports/results/*.txt
+models/*.joblib
+models/*.json
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
