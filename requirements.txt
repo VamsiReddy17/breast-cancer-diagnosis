@@ -21,3 +21,8 @@ fastapi>=0.100.0
 uvicorn>=0.20.0
 python-multipart>=0.0.6
 
+# Deep Learning (Phase 2)
+torch>=2.0
+torchvision
+PyYAML
+

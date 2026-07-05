@@ -97,3 +97,28 @@ def test_prediction_endpoint():
     assert "confidence" in res
     assert res["prediction"] in [0, 1]
     assert res["class_label"] in ["Malignant", "Benign"]
+
+
+def test_image_prediction_endpoint():
+    """Test image prediction endpoint with a dummy image."""
+    from PIL import Image
+    import io
+    
+    # Create dummy image in memory
+    img = Image.new('RGB', (224, 224), color='red')
+    img_byte_arr = io.BytesIO()
+    img.save(img_byte_arr, format='JPEG')
+    img_byte_arr = img_byte_arr.getvalue()
+    
+    # Post file to endpoint
+    files = {'file': ('test.jpg', img_byte_arr, 'image/jpeg')}
+    response = client.post("/api/predict/image", files=files)
+    
+    assert response.status_code == 200
+    res = response.json()
+    assert "model_used" in res
+    assert "prediction" in res
+    assert "class_label" in res
+    assert "confidence" in res
+    assert "probabilities" in res
+    assert res["prediction"] in [0, 1]

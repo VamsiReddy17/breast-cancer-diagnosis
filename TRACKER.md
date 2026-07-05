@@ -77,6 +77,14 @@
 
 ---
 
+### PITFALL-008: LLM Inconsistent Defaults
+- **Component**: All new scripts / documentation
+- **Risk**: Future developers or different LLM assistants may assume different default backbone, epochs, or GPU policy, causing training divergence or performance regressions.
+- **Prevention Rule**: Explicitly document all defaults (backbone, epochs, GPU policy) in PLAN.md and embed them as constants in a config file (`config/deep_learning.yaml`). Every script must read from this config instead of hard‑coding values.
+- **Status**: 🟢 Prevented by adding the Hand‑off section in PLAN.md.
+
+---
+
 ## Active Issues
 
 > No active issues yet. Issues will be logged here as they arise during development.

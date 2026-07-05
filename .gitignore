@@ -49,3 +49,8 @@ scratch/
 
 # Kaggle credentials
 kaggle.json
+
+# Data & Large model weights
+data/raw/images/
+models/**/*.pth
+models/**/*.joblib

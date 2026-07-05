@@ -10,11 +10,15 @@ Provides REST API endpoints for:
 
 import os
 import sys
+import io
 import pandas as pd
 import numpy as np
 import joblib
+import torch
+import torchvision.transforms as transforms
+from PIL import Image
 from typing import Dict, Any, List
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -25,7 +29,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from config.config import (
-    RAW_DATA_DIR, FIGURES_DIR, MODELS_DIR, RESULTS_DIR, DATA_CONFIG
+    RAW_DATA_DIR, FIGURES_DIR, MODELS_DIR, RESULTS_DIR, DATA_CONFIG, DL_CONFIG
 )
 from src.utils import get_logger, load_json
 
@@ -562,6 +566,68 @@ def get_debug_info():
         "files_check": files_check,
         "log_tail": log_contents
     }
+
+
+
+@app.post("/api/predict/image")
+async def run_image_prediction(file: UploadFile = File(...)):
+    """
+    Accepts an uploaded histopathology image file, runs inference on the PyTorch CNN model,
+    and returns malignant/benign probabilities.
+    """
+    try:
+        model_path = os.path.join(MODELS_DIR, "deep_learning", "best_model.pth")
+        if not os.path.exists(model_path):
+            raise HTTPException(
+                status_code=500, 
+                detail="Deep learning model weights missing in models/deep_learning/ directory. Train model first."
+            )
+
+        from src.cnn_model import HistopathologyCNN
+        
+        # Load model structure and weights on CPU
+        backbone_name = DL_CONFIG["backbone"]
+        model = HistopathologyCNN(model_name=backbone_name, pretrained=False)
+        model.load_state_dict(torch.load(model_path, map_location=torch.device("cpu")))
+        model.eval()
+
+        # Read image
+        img_bytes = await file.read()
+        image = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+
+        # Apply evaluation transforms
+        val_transform = transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+        
+        img_tensor = val_transform(image).unsqueeze(0)
+
+        # Run inference
+        with torch.no_grad():
+            outputs = model(img_tensor)
+            probs = torch.softmax(outputs, dim=1).squeeze(0)
+            prediction_idx = torch.argmax(probs).item()
+
+        class_name = "Malignant" if prediction_idx == 1 else "Benign"
+        confidence = round(probs[prediction_idx].item() * 100, 2)
+        
+        return {
+            "model_used": f"{backbone_name.replace('_', '-').title()} CNN",
+            "prediction": prediction_idx,
+            "class_label": class_name,
+            "confidence": confidence,
+            "probabilities": {
+                "Benign": round(probs[0].item() * 100, 2),
+                "Malignant": round(probs[1].item() * 100, 2)
+            }
+        }
+    except Exception as e:
+        import traceback
+        err_msg = f"Image inference failed: {str(e)}\n{traceback.format_exc()}"
+        logger.error(err_msg)
+        raise HTTPException(status_code=500, detail=err_msg)
 
 
 # ─── Launch Helper ──────────────────────────────────────────────────────────────

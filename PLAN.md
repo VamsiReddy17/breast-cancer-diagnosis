@@ -1,7 +1,7 @@
 # Project Plan — Breast Cancer Diagnosis
 
 > **Last Updated**: 2026-07-05
-> **Status**: Phase 1C — Completed (Phase 2 — Planned)
+> **Status**: Phase 2 — Completed
 
 ---
 
@@ -104,28 +104,39 @@
 
 ---
 
-## Phase 2: Image-Based Deep Learning (Planned)
+## Phase 2: Image-Based Deep Learning (Completed)
 
-### Milestone 14: Image Dataset Ingestion & Preparation
-- [ ] Write Python script (`src/download_images.py`) to programmatically download BreaKHis images using Kaggle API.
-- [ ] Extract, structure folders (`data/raw/images/benign`, `data/raw/images/malignant`).
-- [ ] Implement data loading script (`src/dataset.py`) defining train/val/test splits (70/15/15) with random rotation, color jitter, and normalization transforms.
+### Milestone 14: Image Dataset Ingestion & Preparation ✅
+- [x] Write Python script (`src/download_images.py`) to programmatically download BreaKHis images using Kaggle API.
+- [x] Extract, structure folders (`data/raw/images/benign`, `data/raw/images/malignant`).
+- [x] Implement data loading script (`src/dataset.py`) defining train/val/test splits (70/15/15) with random rotation, color jitter, and normalization transforms.
 
-### Milestone 15: Deep Learning CNN Modeling & Local Training
-- [ ] Define PyTorch model script (`src/cnn_model.py`) supporting Transfer Learning (ResNet50 / EfficientNet) with custom binary classification head.
-- [ ] Implement training pipeline (`src/train_cnn.py`) configuring loss optimization, validation checks, and early stopping callbacks.
-- [ ] Output training logs to `logs/deep_learning.log` tracking training/validation loss and accuracy per epoch.
-- [ ] Save best weights model file to `models/deep_learning/best_model.pth`.
+### Milestone 15: Deep Learning CNN Modeling & Local Training ✅
+- [x] Define PyTorch model script (`src/cnn_model.py`) supporting Transfer Learning (ResNet50 / EfficientNet) with custom binary classification head.
+- [x] Implement training pipeline (`src/train_cnn.py`) configuring loss optimization, validation checks, and early stopping callbacks.
+- [x] Output training logs to `logs/deep_learning.log` tracking training/validation loss and accuracy per epoch.
+- [x] Save best weights model file to `models/deep_learning/best_model.pth`.
 
-### Milestone 16: Model Evaluation & Visual Outputs
-- [ ] Save training/validation loss curves and accuracy curves to `reports/figures/dl/loss_accuracy_curves.png`.
-- [ ] Generate confusion matrix and ROC curves on the test set, saving outputs to `reports/figures/dl/test_evaluation.png`.
-- [ ] Export final classification performance metrics (Accuracy, Precision, Recall, F1) to `reports/results/dl_metrics.json`.
+### Milestone 16: Model Evaluation & Visual Outputs ✅
+- [x] Save training/validation loss curves and accuracy curves to `reports/figures/dl/loss_accuracy_curves.png`.
+- [x] Generate confusion matrix and ROC curves on the test set, saving outputs to `reports/figures/dl/test_evaluation.png`.
+- [x] Export final classification performance metrics (Accuracy, Precision, Recall, F1) to `reports/results/dl_metrics.json`.
 
-### Milestone 17: FastAPI Endpoint & Frontend UI Integration
-- [ ] Add FastAPI endpoint `POST /api/predict/image` accepting multi-part image file uploads, resizing, scaling, and running inference.
-- [ ] Add Tab 4: **Image Classifier** in the React frontend (`frontend/src/App.jsx`) with image drag-and-drop file uploader.
-- [ ] Display predictions, classification logits (Benign vs. Malignant), and confidence levels dynamically.
+### Milestone 17: FastAPI Endpoint & Frontend UI Integration ✅
+- [x] Add FastAPI endpoint `POST /api/predict/image` accepting multi-part image file uploads, resizing, scaling, and running inference.
+- [x] Add Tab 4: **Image Classifier** in the React frontend (`frontend/src/App.jsx`) with image drag-and-drop file uploader.
+- [x] Display predictions, classification logits (Benign vs. Malignant), and confidence levels dynamically.
+
+---
+
+## Hand‑off & LLM Compatibility
+
+- **Backbone model**: EfficientNet‑B0 (transfer learning) – lightweight, fast, portable across environments.
+- **Training epochs**: 10 (early‑stopping enabled) – balances training time and performance.
+- **GPU policy**: Use Apple‑Silicon MPS if `torch.backends.mps.is_available()`; otherwise fall back to CPU. This conditional logic ensures the pipeline runs on any machine without manual changes.
+- **Documentation**: All new scripts include docstrings and a `requirements.txt` entry specifying `torch>=2.0`, `torchvision`, and `PyYAML`.
+- **Hand‑off**: The implementation plan, issue tracker, and code comments explicitly mention the chosen defaults so a new LLM (or developer) can pick up without needing to infer design decisions.
+- **Recent UI Fixes**: Removed stray duplicate `<form>` tag outside the Inference tab, ensured the inference submit button is correctly wrapped inside the form, and integrated the Image Classifier tab with proper file upload handling.
 
 ---
 
