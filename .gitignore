@@ -46,3 +46,6 @@ Icon
 
 # Temporary scratch folder
 scratch/
+
+# Kaggle credentials
+kaggle.json
