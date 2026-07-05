@@ -105,12 +105,27 @@
 ---
 
 ## Phase 2: Image-Based Deep Learning (Planned)
-- [ ] Download BreakHis / CBIS-DDSM dataset
-- [ ] Image preprocessing pipeline
-- [ ] CNN architectures (ResNet, EfficientNet)
-- [ ] Transfer learning
-- [ ] Data augmentation
-- [ ] GPU training setup
+
+### Milestone 14: Image Dataset Ingestion & Preparation
+- [ ] Write Python script (`src/download_images.py`) to programmatically download BreaKHis images using Kaggle API.
+- [ ] Extract, structure folders (`data/raw/images/benign`, `data/raw/images/malignant`).
+- [ ] Implement data loading script (`src/dataset.py`) defining train/val/test splits (70/15/15) with random rotation, color jitter, and normalization transforms.
+
+### Milestone 15: Deep Learning CNN Modeling & Local Training
+- [ ] Define PyTorch model script (`src/cnn_model.py`) supporting Transfer Learning (ResNet50 / EfficientNet) with custom binary classification head.
+- [ ] Implement training pipeline (`src/train_cnn.py`) configuring loss optimization, validation checks, and early stopping callbacks.
+- [ ] Output training logs to `logs/deep_learning.log` tracking training/validation loss and accuracy per epoch.
+- [ ] Save best weights model file to `models/deep_learning/best_model.pth`.
+
+### Milestone 16: Model Evaluation & Visual Outputs
+- [ ] Save training/validation loss curves and accuracy curves to `reports/figures/dl/loss_accuracy_curves.png`.
+- [ ] Generate confusion matrix and ROC curves on the test set, saving outputs to `reports/figures/dl/test_evaluation.png`.
+- [ ] Export final classification performance metrics (Accuracy, Precision, Recall, F1) to `reports/results/dl_metrics.json`.
+
+### Milestone 17: FastAPI Endpoint & Frontend UI Integration
+- [ ] Add FastAPI endpoint `POST /api/predict/image` accepting multi-part image file uploads, resizing, scaling, and running inference.
+- [ ] Add Tab 4: **Image Classifier** in the React frontend (`frontend/src/App.jsx`) with image drag-and-drop file uploader.
+- [ ] Display predictions, classification logits (Benign vs. Malignant), and confidence levels dynamically.
 
 ---
 
