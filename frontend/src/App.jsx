@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import ReactECharts from 'echarts-for-react';
 import { 
@@ -16,7 +16,8 @@ import {
   Sliders, 
   HelpCircle,
   Play,
-  Home
+  Home,
+  Camera
 } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
@@ -67,6 +68,14 @@ function App() {
   const [predictionResult, setPredictionResult] = useState(null);
   const [predicting, setPredicting] = useState(false);
   const [predictionError, setPredictionError] = useState(null);
+
+  // Tab 4: Image Classifier States
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState(null);
+  const [imagePrediction, setImagePrediction] = useState(null);
+  const [imagePredicting, setImagePredicting] = useState(false);
+  const [imageError, setImageError] = useState(null);
+  const fileInputRef = useRef(null);
 
   // Init theme
   useEffect(() => {
@@ -216,6 +225,50 @@ function App() {
       setPredictionError(err.response?.data?.detail || "An unexpected error occurred during prediction.");
     } finally {
       setPredicting(false);
+    }
+  };
+
+  // Image Classifier Handlers
+  const handleImageSelect = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setImageFile(file);
+      setImagePreviewUrl(URL.createObjectURL(file));
+      setImageError(null);
+    }
+  };
+
+  const uploadImageAndPredict = async (e) => {
+    e.preventDefault();
+    if (!imageFile) {
+      setImageError('Please select an image file before submitting.');
+      return;
+    }
+    setImagePredicting(true);
+    setImageError(null);
+    setImagePrediction(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', imageFile);
+      const response = await axios.post(`${API_BASE}/api/predict/image`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setImagePrediction(response.data);
+    } catch (err) {
+      console.error('Image prediction failed:', err);
+      setImageError(err.response?.data?.detail || 'An unexpected error occurred during image prediction.');
+    } finally {
+      setImagePredicting(false);
+    }
+  };
+
+  const resetImageState = () => {
+    setImageFile(null);
+    setImagePreviewUrl(null);
+    setImagePrediction(null);
+    setImageError(null);
+    if (fileInputRef && fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
@@ -438,6 +491,17 @@ function App() {
               <Sliders className="w-4 h-4" />
               Live Diagnosis
             </button>
+            <button
+              onClick={() => setActiveTab('image')}
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-all ${
+                activeTab === 'image' 
+                  ? 'bg-white dark:bg-zinc-800 text-blue-600 dark:text-blue-400 shadow-sm' 
+                  : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+              }`}
+            >
+              <Camera className="w-4 h-4" />
+              Image Classifier
+            </button>
           </nav>
 
           <div className="flex items-center gap-2">
@@ -503,6 +567,15 @@ function App() {
         >
           <Sliders className="w-3.5 h-3.5" />
           {datasetMode === 'seer' ? 'Prognosis' : 'Diagnosis'}
+        </button>
+        <button
+          onClick={() => setActiveTab('image')}
+          className={`flex-1 flex justify-center items-center gap-1.5 py-2 text-xs font-semibold rounded-md transition-all ${
+            activeTab === 'image' ? 'bg-white dark:bg-zinc-800 text-blue-600' : 'text-zinc-500'
+          }`}
+        >
+          <Camera className="w-3.5 h-3.5" />
+          Image
         </button>
       </div>
 
@@ -1215,6 +1288,187 @@ function App() {
 
             </div>
 
+          </div>
+        )}
+
+        {activeTab === 'image' && (
+          <div className="space-y-6 animate-fadeIn">
+            {/* Page Header */}
+            <div>
+              <h2 className="text-2xl font-bold tracking-tight">Histopathology Image Classifier</h2>
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                Upload a breast histopathology biopsy image (e.g., from the BreaKHis dataset) to evaluate Benign vs. Malignant classification using our trained PyTorch Deep Learning CNN model.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Upload panel */}
+              <div className="lg:col-span-2 bg-white dark:bg-[#0c0c0f] border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 shadow-sm flex flex-col justify-between">
+                <div>
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-400 mb-4 font-mono">Select Histopathology Image</h3>
+                  
+                  {/* File input */}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    ref={fileInputRef}
+                    onChange={handleImageSelect}
+                    className="hidden"
+                  />
+
+                  {/* Drop zone / Upload UI */}
+                  <div 
+                    onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                    className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${
+                      imagePreviewUrl
+                        ? 'border-zinc-300 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-950/10'
+                        : 'border-zinc-200 dark:border-zinc-800 hover:border-blue-500 dark:hover:border-blue-400 bg-zinc-50/20 dark:bg-zinc-950/5'
+                    }`}
+                  >
+                    {imagePreviewUrl ? (
+                      <div className="space-y-4">
+                        <img 
+                          src={imagePreviewUrl} 
+                          alt="Biopsy preview" 
+                          className="max-h-[300px] mx-auto rounded-lg shadow-md border border-zinc-200 dark:border-zinc-800 object-contain" 
+                        />
+                        <div className="text-xs text-zinc-500 font-mono">
+                          {imageFile ? `${imageFile.name} (${(imageFile.size / 1024).toFixed(1)} KB)` : 'Selected Image'}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-4 py-8">
+                        <div className="w-16 h-16 mx-auto bg-zinc-100 dark:bg-zinc-800 rounded-full flex items-center justify-center text-zinc-400 dark:text-zinc-500">
+                          <Database className="w-8 h-8" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Click to upload histopathology image</p>
+                          <p className="text-xs text-zinc-400 mt-1">Supports PNG, JPG, JPEG biopsy slides</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {imageError && (
+                    <div className="mt-4 p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/30 rounded-lg text-xs text-rose-600 dark:text-rose-400 flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4" />
+                      <span>{imageError}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Buttons */}
+                <div className="mt-6 flex items-center justify-end gap-3 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+                  <button
+                    type="button"
+                    onClick={resetImageState}
+                    disabled={imagePredicting || !imagePreviewUrl}
+                    className="px-4 py-2 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs font-semibold hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors disabled:opacity-40"
+                  >
+                    Reset File
+                  </button>
+                  <button
+                    type="button"
+                    onClick={uploadImageAndPredict}
+                    disabled={imagePredicting || !imageFile}
+                    className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {imagePredicting ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        Classifying...
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                        Analyze Biopsy Image
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Diagnosis output panel */}
+              <div className="bg-white dark:bg-[#0c0c0f] border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 shadow-sm min-h-[400px] flex flex-col justify-center items-center text-center">
+                {!imagePrediction && !imagePredicting && !imageError && (
+                  <div className="space-y-3 text-zinc-400 max-w-xs">
+                    <Database className="w-12 h-12 mx-auto stroke-1" />
+                    <h4 className="text-sm font-bold text-zinc-600 dark:text-zinc-300">Awaiting Image</h4>
+                    <p className="text-xs">
+                      Upload a histopathology biopsy slide image on the left and run analysis to evaluate malignant vs. benign status.
+                    </p>
+                  </div>
+                )}
+
+                {imagePredicting && (
+                  <div className="space-y-4">
+                    <RefreshCw className="w-10 h-10 animate-spin text-blue-600 mx-auto" />
+                    <h4 className="text-sm font-bold">Deep Learning Inference</h4>
+                    <p className="text-xs text-zinc-500 max-w-xs">
+                      Running image pixel convolutions using our trained deep learning classifier model...
+                    </p>
+                  </div>
+                )}
+
+                {imagePrediction && (
+                  <div className="space-y-6 w-full animate-fadeIn">
+                    <div className="space-y-2">
+                      <div className="text-[10px] uppercase font-bold text-zinc-400 tracking-widest font-mono">Deep Learning Classification</div>
+                      <div className={`text-3xl font-black ${
+                        imagePrediction.prediction === 1 ? 'text-rose-600' : 'text-emerald-600'
+                      }`}>
+                        {imagePrediction.class_label || (imagePrediction.prediction === 1 ? 'Malignant' : 'Benign')}
+                      </div>
+                      <p className="text-[10px] text-zinc-500 font-mono">using EfficientNet-B0 backbone</p>
+                    </div>
+
+                    {/* Confidence bar */}
+                    {imagePrediction.probabilities && (
+                      <div className="space-y-2 max-w-xs mx-auto">
+                        <div className="flex justify-between text-xs font-semibold text-zinc-500">
+                          <span>Benign</span>
+                          <span>Malignant</span>
+                        </div>
+                        
+                        {/* Progress Bar */}
+                        <div className="w-full h-3.5 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden flex shadow-inner">
+                          <div 
+                            style={{ width: `${imagePrediction.probabilities.Benign}%` }}
+                            className="bg-emerald-500 transition-all duration-500" 
+                          />
+                          <div 
+                            style={{ width: `${imagePrediction.probabilities.Malignant}%` }}
+                            className="bg-rose-500 transition-all duration-500" 
+                          />
+                        </div>
+
+                        <div className="flex justify-between text-[10px] font-mono text-zinc-400">
+                          <span>{imagePrediction.probabilities.Benign}%</span>
+                          <span>{imagePrediction.probabilities.Malignant}%</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Feedback block */}
+                    <div className={`p-4 rounded-xl text-xs flex gap-3 text-left ${
+                      imagePrediction.prediction === 1
+                        ? 'bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30 text-rose-800 dark:text-rose-300'
+                        : 'bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30 text-emerald-800 dark:text-emerald-300'
+                    }`}>
+                      <AlertCircle className="w-5 h-5 shrink-0" />
+                      <div>
+                        <strong className="font-bold block mb-1">
+                          {imagePrediction.prediction === 1 ? 'Malignancy Detected' : 'No Immediate Malignancy'}
+                        </strong>
+                        {imagePrediction.prediction === 1
+                          ? 'Deep learning pattern analysis identified cell structures characteristic of malignant tumors. Further histological investigation is recommended.'
+                          : 'Tissue structure parameters indicate regular cellular distributions aligned with benign morphology.'}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 

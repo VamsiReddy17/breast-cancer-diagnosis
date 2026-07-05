@@ -1,0 +1,5 @@
+backbone: efficientnet_b0
+epochs: 10
+batch_size: 32
+learning_rate: 0.001
+device: auto   # mps > cuda > cpu

@@ -6,6 +6,7 @@ No magic numbers anywhere else in the codebase.
 """
 
 import os
+import yaml
 
 # ─── Project Root ───────────────────────────────────────────────────────────────
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -114,6 +115,27 @@ PLOT_CONFIG = {
     "font_size": 12,
     "title_size": 14,
 }
+# ─── Deep Learning Configuration (Phase 2) ──────────────────────────────────────
+DL_CONFIG_PATH = os.path.join(PROJECT_ROOT, "config", "deep_learning.yaml")
+if os.path.exists(DL_CONFIG_PATH):
+    try:
+        with open(DL_CONFIG_PATH, "r") as f:
+            DL_CONFIG = yaml.safe_load(f)
+    except Exception:
+        DL_CONFIG = {}
+else:
+    DL_CONFIG = {}
+
+# Set defaults if keys are missing
+DL_CONFIG.setdefault("backbone", "efficientnet_b0")
+DL_CONFIG.setdefault("epochs", 10)
+DL_CONFIG.setdefault("batch_size", 32)
+DL_CONFIG.setdefault("learning_rate", 0.001)
+DL_CONFIG.setdefault("device", "auto")
+DL_CONFIG.setdefault("patience", 3)  # Early stopping patience
+DL_CONFIG.setdefault("test_size", 0.15)
+DL_CONFIG.setdefault("val_size", 0.15)
+
 
 
 def ensure_directories():

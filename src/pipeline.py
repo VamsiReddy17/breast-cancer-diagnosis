@@ -306,23 +306,37 @@ def run_pipeline():
 # ─── Entry Point ─────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    print("\n" + "🔬" * 35)
-    print("  BREAST CANCER DIAGNOSIS — Phase 1A")
-    print("  Wisconsin Diagnostic Dataset")
-    print("  Self-Developing Pipeline v0.1.0")
-    print("🔬" * 35 + "\n")
+    import argparse
+    parser = argparse.ArgumentParser(description="Breast Cancer ML/DL pipeline orchestrator.")
+    parser.add_argument("--cnn", action="store_true", help="Train and evaluate the Deep Learning CNN model.")
+    args = parser.parse_args()
 
-    summary = run_pipeline()
-
-    if summary["success"]:
-        print("\n✅ Pipeline completed successfully!")
-        print(f"📊 Check reports at: reports/")
-        print(f"📈 Check figures at: reports/figures/")
-        print(f"🤖 Check models at: models/")
-        print(f"📝 Check logs at: logs/pipeline.log")
+    if args.cnn:
+        print("\n" + "🔬" * 35)
+        print("  BREAST CANCER IMAGING — Phase 2")
+        print("  Histopathology CNN Model Pipeline")
+        print("🔬" * 35 + "\n")
+        
+        from src.train_cnn import train_model
+        train_model()
     else:
-        print("\n❌ Pipeline completed with errors!")
-        print("Check TRACKER.md and logs/pipeline.log for details.")
-        failed = [s for s in summary["steps"] if s["status"] == "FAIL"]
-        for f in failed:
-            print(f"  ❌ {f['step']}: {f.get('error', 'Unknown error')}")
+        print("\n" + "🔬" * 35)
+        print("  BREAST CANCER DIAGNOSIS — Phase 1A")
+        print("  Wisconsin Diagnostic Dataset")
+        print("  Self-Developing Pipeline v0.1.0")
+        print("🔬" * 35 + "\n")
+
+        summary = run_pipeline()
+
+        if summary["success"]:
+            print("\n✅ Pipeline completed successfully!")
+            print(f"📊 Check reports at: reports/")
+            print(f"📈 Check figures at: reports/figures/")
+            print(f"🤖 Check models at: models/")
+            print(f"📝 Check logs at: logs/pipeline.log")
+        else:
+            print("\n❌ Pipeline completed with errors!")
+            print("Check TRACKER.md and logs/pipeline.log for details.")
+            failed = [s for s in summary["steps"] if s["status"] == "FAIL"]
+            for f in failed:
+                print(f"  ❌ {f['step']}: {f.get('error', 'Unknown error')}")
