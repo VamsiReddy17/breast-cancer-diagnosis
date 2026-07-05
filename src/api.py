@@ -244,84 +244,90 @@ def run_prediction(payload: InferenceRequest):
     """
     Accepts 30 features, scales them using the saved scaler, and runs inference.
     """
-    # 1. Load scaler
-    scaler_path = os.path.join(MODELS_DIR, "scaler.joblib")
-    if not os.path.exists(scaler_path):
-        raise HTTPException(status_code=500, detail="Fitted scaler missing in models/ directory.")
-    
-    scaler = joblib.load(scaler_path)
-    
-    # 2. Resolve model path
-    safe_model_name = payload.model_name.lower().replace(" ", "_")
-    model_path = os.path.join(MODELS_DIR, f"{safe_model_name}_best.joblib")
-    
-    if not os.path.exists(model_path):
-        raise HTTPException(
-            status_code=404, 
-            detail=f"Fitted model '{payload.model_name}' not found. Supported: KNN, MLP, SVM, Random Forest, Logistic Regression"
-        )
-    
-    model = joblib.load(model_path)
-    
-    # 3. Align features
-    # Sklearn wisconsin bunch features are sorted in specific order
-    csv_path = get_raw_data_path()
-    df_columns = list(pd.read_csv(csv_path).columns)
-    df_columns.remove(DATA_CONFIG["target_column"])
-    if "id" in df_columns:
-        df_columns.remove("id")
+    try:
+        # 1. Load scaler
+        scaler_path = os.path.join(MODELS_DIR, "scaler.joblib")
+        if not os.path.exists(scaler_path):
+            raise HTTPException(status_code=500, detail="Fitted scaler missing in models/ directory.")
+        
+        scaler = joblib.load(scaler_path)
+        
+        # 2. Resolve model path
+        safe_model_name = payload.model_name.lower().replace(" ", "_")
+        model_path = os.path.join(MODELS_DIR, f"{safe_model_name}_best.joblib")
+        
+        if not os.path.exists(model_path):
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Fitted model '{payload.model_name}' not found. Supported: KNN, MLP, SVM, Random Forest, Logistic Regression"
+            )
+        
+        model = joblib.load(model_path)
+        
+        # 3. Align features
+        # Sklearn wisconsin bunch features are sorted in specific order
+        csv_path = get_raw_data_path()
+        df_columns = list(pd.read_csv(csv_path).columns)
+        df_columns.remove(DATA_CONFIG["target_column"])
+        if "id" in df_columns:
+            df_columns.remove("id")
 
-    # Validate feature count and presence
-    input_values = []
-    missing_features = []
-    for col in df_columns:
-        if col in payload.features:
-            input_values.append(payload.features[col])
+        # Validate feature count and presence
+        input_values = []
+        missing_features = []
+        for col in df_columns:
+            if col in payload.features:
+                input_values.append(payload.features[col])
+            else:
+                missing_features.append(col)
+                
+        if missing_features:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Incomplete features array. Missing columns: {missing_features}"
+            )
+
+        # 4. Convert to DataFrame and scale
+        input_df = pd.DataFrame([payload.features])[df_columns]
+        scaled_array = scaler.transform(input_df)
+        
+        # 5. Predict
+        # Wrap scaled array in DataFrame with correct column names to prevent model warnings
+        scaled_df = pd.DataFrame(scaled_array, columns=df_columns)
+        prediction_idx = int(model.predict(scaled_df)[0])
+        
+        # Calculate probabilities/confidence if model supports it
+        probabilities = [0.0, 0.0]
+        if hasattr(model, "predict_proba"):
+            probabilities = [float(p) for p in model.predict_proba(scaled_df)[0]]
+        elif hasattr(model, "decision_function"):
+            # SVM fallback for distance margins
+            decision = float(model.decision_function(scaled_df)[0])
+            # Simple sigmoid mapping to mock probability
+            p1 = 1 / (1 + np.exp(-decision))
+            probabilities = [1 - p1, p1]
         else:
-            missing_features.append(col)
-            
-    if missing_features:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Incomplete features array. Missing columns: {missing_features}"
-        )
+            # Default fallback
+            probabilities[prediction_idx] = 1.0
 
-    # 4. Convert to DataFrame and scale
-    input_df = pd.DataFrame([payload.features])[df_columns]
-    scaled_array = scaler.transform(input_df)
-    
-    # 5. Predict
-    # Wrap scaled array in DataFrame with correct column names to prevent model warnings
-    scaled_df = pd.DataFrame(scaled_array, columns=df_columns)
-    prediction_idx = int(model.predict(scaled_df)[0])
-    
-    # Calculate probabilities/confidence if model supports it
-    probabilities = [0.0, 0.0]
-    if hasattr(model, "predict_proba"):
-        probabilities = [float(p) for p in model.predict_proba(scaled_df)[0]]
-    elif hasattr(model, "decision_function"):
-        # SVM fallback for distance margins
-        decision = float(model.decision_function(scaled_df)[0])
-        # Simple sigmoid mapping to mock probability
-        p1 = 1 / (1 + np.exp(-decision))
-        probabilities = [1 - p1, p1]
-    else:
-        # Default fallback
-        probabilities[prediction_idx] = 1.0
-
-    class_name = DATA_CONFIG["class_names"][prediction_idx] # 0 = Malignant, 1 = Benign
-    
-    # Format return dictionary
-    return {
-        "model_used": payload.model_name,
-        "prediction": prediction_idx,  # 0 or 1
-        "class_label": class_name,     # "Malignant" or "Benign"
-        "confidence": round(probabilities[prediction_idx] * 100, 2), # Percentage
-        "probabilities": {
-            DATA_CONFIG["class_names"][0]: round(probabilities[0] * 100, 2),
-            DATA_CONFIG["class_names"][1]: round(probabilities[1] * 100, 2)
+        class_name = DATA_CONFIG["class_names"][prediction_idx] # 0 = Malignant, 1 = Benign
+        
+        # Format return dictionary
+        return {
+            "model_used": payload.model_name,
+            "prediction": prediction_idx,  # 0 or 1
+            "class_label": class_name,     # "Malignant" or "Benign"
+            "confidence": round(probabilities[prediction_idx] * 100, 2), # Percentage
+            "probabilities": {
+                DATA_CONFIG["class_names"][0]: round(probabilities[0] * 100, 2),
+                DATA_CONFIG["class_names"][1]: round(probabilities[1] * 100, 2)
+            }
         }
-    }
+    except Exception as e:
+        import traceback
+        err_msg = f"Inference failed: {str(e)}\n{traceback.format_exc()}"
+        logger.error(err_msg)
+        raise HTTPException(status_code=500, detail=err_msg)
 
 
 @app.get("/api/debug")
