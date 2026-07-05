@@ -1,7 +1,7 @@
 # Project Plan — Breast Cancer Diagnosis
 
 > **Last Updated**: 2026-07-05
-> **Status**: Phase 1B — Completed (Phase 1C — Planned)
+> **Status**: Phase 1C — Completed (Phase 2 — Planned)
 
 ---
 
@@ -95,12 +95,12 @@
 
 ---
 
-## Phase 1C: SEER Dataset (Planned)
-- [ ] Download SEER dataset from IEEE Dataport
-- [ ] Data cleaning & preprocessing (handle 4M records)
-- [ ] Feature engineering for clinical data
-- [ ] Survival prediction models
-- [ ] Scale pipeline to handle large datasets
+## Phase 1C: SEER Dataset ✅
+- [x] Download SEER cohort dataset
+- [x] Data cleaning & categorical mapping (4,024 patient records)
+- [x] Feature engineering and scaling for clinical attributes
+- [x] Train 5 survival prediction models (KNN, Logistic Regression, MLP, SVM, Random Forest)
+- [x] Extend FastAPI backend routes and update React multi-mode dashboard switching
 
 ---
 
@@ -122,3 +122,5 @@
 | 2026-07-04 | 10-Fold CV | Small dataset — maximize use of all data |
 | 2026-07-04 | Self-developing loop pattern | Prevents hallucination, tracks all errors |
 | 2026-07-04 | Add React+FastAPI Web App (Phase 1B) | User requested interactive web application with tabular data, EDA plots, model insights, and inference form. |
+| 2026-07-05 | Implement SEER Clinical Survival Prediction (Phase 1C) | Expand portal scope to clinical staging and mortality risk outcomes using SEER Breast Cancer cohort. |
+| 2026-07-05 | Add Dynamic Multi-Mode Switcher UI | Connect both Wisconsin FNA Cytology (Diagnosis) and SEER Clinical Cohort (Prognosis) in a unified React portal. |
