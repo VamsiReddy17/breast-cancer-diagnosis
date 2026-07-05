@@ -40,6 +40,23 @@ logger = get_logger("api")
 # results are missing on startup, dynamically trigger the ML pipeline to train them.
 STARTUP_ERROR = None
 try:
+    # 1. Check/download deep learning weights
+    dl_model_path = os.path.join(MODELS_DIR, "deep_learning", "best_model.pth")
+    if not os.path.exists(dl_model_path):
+        weights_url = os.environ.get("DL_MODEL_WEIGHTS_URL")
+        if weights_url:
+            logger.info(f"Downloading deep learning model weights from {weights_url}...")
+            import urllib.request
+            os.makedirs(os.path.join(MODELS_DIR, "deep_learning"), exist_ok=True)
+            urllib.request.urlretrieve(weights_url, dl_model_path)
+            logger.info("✅ Deep learning model weights downloaded successfully.")
+        else:
+            logger.warning(
+                "⚠️ Deep learning model weights (best_model.pth) are missing. "
+                "Set DL_MODEL_WEIGHTS_URL environment variable to enable automatic download."
+            )
+
+    # 2. Check/re-run classical ML pipeline
     comparison_path = os.path.join(RESULTS_DIR, "model_comparison.json")
     scaler_path = os.path.join(MODELS_DIR, "scaler.joblib")
     if not os.path.exists(comparison_path) or not os.path.exists(scaler_path):
