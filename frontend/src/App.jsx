@@ -39,6 +39,7 @@ function App() {
   // Global States
   const [activeTab, setActiveTab] = useState('home'); // 'home' | 'data' | 'models' | 'inference'
   const [isDarkMode, setIsDarkMode] = useState(true);
+  const [datasetMode, setDatasetMode] = useState('wisconsin'); // 'wisconsin' | 'seer'
 
   // Tab 1: Data & EDA States
   const [rawTableData, setRawTableData] = useState([]);
@@ -77,17 +78,29 @@ function App() {
     }
   }, [isDarkMode]);
 
-  // Fetch Data & EDA details
+  // Fetch Data & EDA details when datasetMode or active states change
   useEffect(() => {
-    fetchTableData(tablePage);
+    setRawTableData([]);
+    setColumns([]);
+    setEdaStats([]);
+    setEdaPlots([]);
+    setModelDetails([]);
+    setFeatures({});
+    setPredictionResult(null);
+    setPredictionError(null);
+    setTableSearch('');
+    setTableTargetFilter('');
+
+    fetchTableData(1);
     fetchEdaDetails();
     fetchModelDetails();
-  }, []);
+  }, [datasetMode]);
 
   const fetchTableData = async (page = 1) => {
     setLoadingData(true);
     try {
-      let url = `${API_BASE}/api/data?page=${page}&size=12`;
+      const apiPrefix = datasetMode === 'seer' ? '/api/seer' : '/api';
+      let url = `${API_BASE}${apiPrefix}/data?page=${page}&size=12`;
       if (tableSearch) url += `&search=${encodeURIComponent(tableSearch)}`;
       if (tableTargetFilter !== '') url += `&target=${tableTargetFilter}`;
       
@@ -106,7 +119,8 @@ function App() {
 
   const fetchEdaDetails = async () => {
     try {
-      const response = await axios.get(`${API_BASE}/api/eda`);
+      const apiPrefix = datasetMode === 'seer' ? '/api/seer' : '/api';
+      const response = await axios.get(`${API_BASE}${apiPrefix}/eda`);
       setEdaStats(response.data.statistical_summary);
       setEdaPlots(response.data.plots);
       if (response.data.plots.length > 0) {
@@ -120,7 +134,8 @@ function App() {
   const fetchModelDetails = async () => {
     setLoadingModels(true);
     try {
-      const response = await axios.get(`${API_BASE}/api/models`);
+      const apiPrefix = datasetMode === 'seer' ? '/api/seer' : '/api';
+      const response = await axios.get(`${API_BASE}${apiPrefix}/models`);
       setModelDetails(response.data.models);
       setOverallPlots(response.data.overall_plots);
       if (response.data.models.length > 0) {
@@ -144,7 +159,6 @@ function App() {
   const handleTargetFilterChange = (val) => {
     setTableTargetFilter(val);
     setTablePage(1);
-    // Use timeout to let state update
     setTimeout(() => {
       fetchTableData(1);
     }, 50);
@@ -153,7 +167,8 @@ function App() {
   // Prefill prediction form with random sample from backend
   const loadRandomSample = async (targetType = null) => {
     try {
-      let url = `${API_BASE}/api/data/random`;
+      const apiPrefix = datasetMode === 'seer' ? '/api/seer' : '/api';
+      let url = `${API_BASE}${apiPrefix}/data/random`;
       if (targetType !== null) {
         url += `?target=${targetType}`;
       }
@@ -190,7 +205,8 @@ function App() {
     setPredictionError(null);
     setPredictionResult(null);
     try {
-      const response = await axios.post(`${API_BASE}/api/predict`, {
+      const apiPrefix = datasetMode === 'seer' ? '/api/seer' : '/api';
+      const response = await axios.post(`${API_BASE}${apiPrefix}/predict`, {
         model_name: predictorModel,
         features: features
       });
@@ -262,6 +278,105 @@ function App() {
 
   const bestModel = getBestModel();
 
+  const renderFeatureField = (featureName) => {
+    const stats = edaStats.find(s => s.feature === featureName) || {};
+    
+    // Categorical dropdown mapping values for SEER Mode
+    const seerCategoricalOptions = {
+      "Race": [
+        { value: 0, label: "White" },
+        { value: 1, label: "Black" },
+        { value: 2, label: "Other" }
+      ],
+      "Marital Status": [
+        { value: 0, label: "Married" },
+        { value: 1, label: "Single" },
+        { value: 2, label: "Divorced" },
+        { value: 3, label: "Widowed" },
+        { value: 4, label: "Separated" }
+      ],
+      "T_stage": [
+        { value: 0, label: "T1 (Tumor Size <= 2cm)" },
+        { value: 1, label: "T2 (2cm < Size <= 5cm)" },
+        { value: 2, label: "T3 (Size > 5cm)" },
+        { value: 3, label: "T4 (Infiltrates wall/skin)" }
+      ],
+      "N Stage": [
+        { value: 0, label: "N1 (1-3 axillary nodes)" },
+        { value: 1, label: "N2 (4-9 axillary nodes)" },
+        { value: 2, label: "N3 (>=10 axillary nodes)" }
+      ],
+      "6th Stage": [
+        { value: 0, label: "IIA" },
+        { value: 1, label: "IIB" },
+        { value: 2, label: "IIIA" },
+        { value: 3, label: "IIIB" },
+        { value: 4, label: "IIIC" }
+      ],
+      "differentiate": [
+        { value: 0, label: "Well differentiated" },
+        { value: 1, label: "Moderately differentiated" },
+        { value: 2, label: "Poorly differentiated" },
+        { value: 3, label: "Undifferentiated" }
+      ],
+      "Grade": [
+        { value: 0, label: "Grade 1 (Well differentiated)" },
+        { value: 1, label: "Grade 2 (Moderately differentiated)" },
+        { value: 2, label: "Grade 3 (Poorly differentiated)" },
+        { value: 3, label: "Grade 4 (Anaplastic)" }
+      ],
+      "A Stage": [
+        { value: 0, label: "Regional (Metastasis in local nodes)" },
+        { value: 1, label: "Distant (Metastasis in distant organs)" }
+      ],
+      "Estrogen Status": [
+        { value: 0, label: "Negative (ER-)" },
+        { value: 1, label: "Positive (ER+)" }
+      ],
+      "Progesterone Status": [
+        { value: 0, label: "Negative (PR-)" },
+        { value: 1, label: "Positive (PR+)" }
+      ]
+    };
+
+    const isCategorical = datasetMode === 'seer' && featureName in seerCategoricalOptions;
+
+    return (
+      <div key={featureName} className="flex flex-col gap-1.5">
+        <label className="text-xs font-semibold capitalize text-zinc-700 dark:text-zinc-300 flex items-center justify-between">
+          <span>{featureName}</span>
+          {!isCategorical && (
+            <span className="text-[10px] font-mono text-zinc-400">
+              Range: {stats.min !== undefined ? stats.min.toFixed(0) : ''} - {stats.max !== undefined ? stats.max.toFixed(0) : ''}
+            </span>
+          )}
+        </label>
+        {isCategorical ? (
+          <select
+            value={features[featureName] !== undefined ? features[featureName] : ''}
+            onChange={(e) => setFeatures({...features, [featureName]: parseInt(e.target.value)})}
+            className="w-full bg-white dark:bg-[#09090b] border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-xs font-semibold text-zinc-900 dark:text-zinc-50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-sm"
+            required
+          >
+            <option value="" disabled>Select option...</option>
+            {seerCategoricalOptions[featureName].map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        ) : (
+          <input
+            type="number"
+            step="any"
+            required
+            value={features[featureName] !== undefined ? features[featureName] : ''}
+            onChange={(e) => setFeatures({...features, [featureName]: parseFloat(e.target.value) || 0})}
+            className="w-full bg-white dark:bg-[#09090b] border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-xs font-mono text-zinc-900 dark:text-zinc-50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-sm"
+          />
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-[#09090b] text-zinc-900 dark:text-zinc-50 transition-colors duration-300 font-sans flex flex-col">
       {/* ─── Header ──────────────────────────────────────────────────────────── */}
@@ -326,6 +441,19 @@ function App() {
           </nav>
 
           <div className="flex items-center gap-2">
+            {/* Dataset Mode Selector */}
+            <div className="flex items-center gap-1.5 mr-2">
+              <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 hidden lg:inline">Dataset Mode:</span>
+              <select
+                value={datasetMode}
+                onChange={(e) => setDatasetMode(e.target.value)}
+                className="px-2.5 py-1.5 text-xs border border-zinc-200 dark:border-zinc-800 rounded-lg bg-zinc-50 dark:bg-zinc-950 font-bold text-blue-600 dark:text-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm"
+              >
+                <option value="wisconsin">Wisconsin (Cytology)</option>
+                <option value="seer">SEER (Clinical Prognosis)</option>
+              </select>
+            </div>
+
             {/* Theme Toggle */}
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
@@ -518,9 +646,9 @@ function App() {
                         onChange={(e) => handleTargetFilterChange(e.target.value)}
                         className="px-3 py-2 text-xs border border-zinc-200 dark:border-zinc-800 rounded-lg bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm"
                       >
-                        <option value="">All Diagnoses</option>
-                        <option value="0">Malignant (Class 0)</option>
-                        <option value="1">Benign (Class 1)</option>
+                        <option value="">{datasetMode === 'seer' ? 'All Survival Outcomes' : 'All Diagnoses'}</option>
+                        <option value="0">{datasetMode === 'seer' ? 'Dead (Class 0)' : 'Malignant (Class 0)'}</option>
+                        <option value="1">{datasetMode === 'seer' ? 'Alive (Class 1)' : 'Benign (Class 1)'}</option>
                       </select>
                       
                       <button
@@ -548,7 +676,7 @@ function App() {
                       <thead className="bg-zinc-50 dark:bg-zinc-900/60 text-zinc-500 dark:text-zinc-400 sticky top-0 z-10 border-b border-zinc-200 dark:border-zinc-800">
                         <tr>
                           <th className="p-3 font-semibold">ID</th>
-                          <th className="p-3 font-semibold">Diagnosis</th>
+                          <th className="p-3 font-semibold">{datasetMode === 'seer' ? 'Outcome' : 'Diagnosis'}</th>
                           {columns.filter(c => c !== 'target' && c !== 'id').map((col) => (
                             <th key={col} className="p-3 font-semibold capitalize whitespace-nowrap">{col}</th>
                           ))}
@@ -564,11 +692,15 @@ function App() {
                                   ? 'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/30'
                                   : 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/30'
                               }`}>
-                                {row.target === 0 ? 'Malignant' : 'Benign'}
+                                {row.target === 0 
+                                  ? (datasetMode === 'seer' ? 'Dead' : 'Malignant') 
+                                  : (datasetMode === 'seer' ? 'Alive' : 'Benign')}
                               </span>
                             </td>
                             {columns.filter(c => c !== 'target' && c !== 'id').map((col) => (
-                              <td key={col} className="p-3 font-mono whitespace-nowrap">{row[col]?.toFixed(4)}</td>
+                              <td key={col} className="p-3 font-mono whitespace-nowrap">
+                                {typeof row[col] === 'number' ? row[col].toFixed(4) : row[col]}
+                              </td>
                             ))}
                           </tr>
                         ))}
@@ -718,11 +850,11 @@ function App() {
                   <div className="text-2xl font-black font-mono text-blue-600">{(bestModel.metrics.accuracy * 100).toFixed(2)}%</div>
                 </div>
                 <div className="bg-white dark:bg-[#0c0c0f] border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 shadow-sm">
-                  <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">Precision (Benign)</div>
+                  <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">Precision ({datasetMode === 'seer' ? 'Alive' : 'Benign'})</div>
                   <div className="text-2xl font-black font-mono text-emerald-600">{(bestModel.metrics.precision * 100).toFixed(2)}%</div>
                 </div>
                 <div className="bg-white dark:bg-[#0c0c0f] border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 shadow-sm">
-                  <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">Recall (Benign)</div>
+                  <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">Recall ({datasetMode === 'seer' ? 'Alive' : 'Benign'})</div>
                   <div className="text-2xl font-black font-mono text-orange-500">{(bestModel.metrics.recall * 100).toFixed(2)}%</div>
                 </div>
                 <div className="bg-white dark:bg-[#0c0c0f] border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 shadow-sm">
@@ -886,14 +1018,14 @@ function App() {
                       onClick={() => loadRandomSample(0)}
                       className="px-2.5 py-1.5 text-[10px] font-bold border border-rose-200 dark:border-rose-950/40 rounded-lg bg-rose-50/50 dark:bg-rose-950/10 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-950/30 transition-all shadow-sm"
                     >
-                      Prefill Malignant Sample
+                      {datasetMode === 'seer' ? 'Prefill Deceased Patient' : 'Prefill Malignant Sample'}
                     </button>
                     <button
                       type="button"
                       onClick={() => loadRandomSample(1)}
                       className="px-2.5 py-1.5 text-[10px] font-bold border border-emerald-200 dark:border-emerald-950/40 rounded-lg bg-emerald-50/50 dark:bg-emerald-950/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-950/30 transition-all shadow-sm"
                     >
-                      Prefill Benign Sample
+                      {datasetMode === 'seer' ? 'Prefill Surviving Patient' : 'Prefill Benign Sample'}
                     </button>
                   </div>
                 </div>
@@ -901,70 +1033,46 @@ function App() {
                 {/* Core Predictor Form */}
                 <form onSubmit={handlePredict} className="space-y-6">
                   
-                  {/* Top 10 Primary inputs grid */}
-                  <div>
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-3 font-mono">Primary Features (Highly Discriminative)</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {TOP_10_FEATURES.map((featureName) => {
-                        const stats = edaStats.find(s => s.feature === featureName) || {};
-                        return (
-                          <div key={featureName} className="flex flex-col gap-1.5">
-                            <label className="text-xs font-semibold capitalize text-zinc-700 dark:text-zinc-300 flex items-center justify-between">
-                              <span>{featureName}</span>
-                              <span className="text-[10px] font-mono text-zinc-400">Range: {stats.min?.toFixed(1)} - {stats.max?.toFixed(1)}</span>
-                            </label>
-                            <input
-                              type="number"
-                              step="any"
-                              required
-                              value={features[featureName] || ''}
-                              onChange={(e) => setFeatures({...features, [featureName]: parseFloat(e.target.value) || 0})}
-                              className="w-full bg-white dark:bg-[#09090b] border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-xs font-mono text-zinc-900 dark:text-zinc-50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-sm"
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Collapsible toggle expander for remaining 20 features */}
-                  <div className="border-t border-zinc-100 dark:border-zinc-800 pt-4">
-                    <button
-                      type="button"
-                      onClick={() => setIsExpanderOpen(!isExpanderOpen)}
-                      className="flex items-center justify-between w-full px-4 py-2 bg-zinc-50 dark:bg-zinc-900/30 rounded-lg text-xs font-semibold hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-all text-zinc-600 dark:text-zinc-300"
-                    >
-                      <span className="flex items-center gap-2">
-                        <HelpCircle className="w-4 h-4 text-zinc-400" />
-                        {isExpanderOpen ? 'Hide' : 'View'} remaining 20 secondary clinical features (Pre-filled)
-                      </span>
-                      <span>{isExpanderOpen ? '▲' : '▼'}</span>
-                    </button>
-
-                    {isExpanderOpen && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 p-4 border border-zinc-100 dark:border-zinc-800/80 rounded-xl bg-zinc-50/20 dark:bg-zinc-950/10">
-                        {edaStats.filter(s => !TOP_10_FEATURES.includes(s.feature)).map((stats) => {
-                          const featureName = stats.feature;
-                          return (
-                            <div key={featureName} className="flex flex-col gap-1.5">
-                              <label className="text-xs font-semibold capitalize text-zinc-700 dark:text-zinc-300 flex items-center justify-between">
-                                <span>{featureName}</span>
-                                <span className="text-[10px] font-mono text-zinc-400">Mean: {stats.mean?.toFixed(2)}</span>
-                              </label>
-                              <input
-                                type="number"
-                                step="any"
-                                required
-                                value={features[featureName] || ''}
-                                onChange={(e) => setFeatures({...features, [featureName]: parseFloat(e.target.value) || 0})}
-                                className="w-full bg-white dark:bg-[#09090b] border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-xs font-mono text-zinc-900 dark:text-zinc-50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-sm"
-                              />
-                            </div>
-                          );
-                        })}
+                  {datasetMode === 'seer' ? (
+                    /* SEER Mode: Render all 15 clinical features directly */
+                    <div>
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-3 font-mono">Clinical Attributes & Prognostic Features</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {edaStats.map((stats) => renderFeatureField(stats.feature))}
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    /* Wisconsin Mode: Render top 10 features + collapsible expander */
+                    <>
+                      <div>
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-3 font-mono">Primary Features (Highly Discriminative)</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {TOP_10_FEATURES.map((featureName) => renderFeatureField(featureName))}
+                        </div>
+                      </div>
+
+                      {/* Collapsible toggle expander for remaining 20 features */}
+                      <div className="border-t border-zinc-100 dark:border-zinc-800 pt-4">
+                        <button
+                          type="button"
+                          onClick={() => setIsExpanderOpen(!isExpanderOpen)}
+                          className="flex items-center justify-between w-full px-4 py-2 bg-zinc-50 dark:bg-zinc-900/30 rounded-lg text-xs font-semibold hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-all text-zinc-600 dark:text-zinc-300"
+                        >
+                          <span className="flex items-center gap-2">
+                            <HelpCircle className="w-4 h-4 text-zinc-400" />
+                            {isExpanderOpen ? 'Hide' : 'View'} remaining 20 secondary clinical features (Pre-filled)
+                          </span>
+                          <span>{isExpanderOpen ? '▲' : '▼'}</span>
+                        </button>
+
+                        {isExpanderOpen && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 p-4 border border-zinc-100 dark:border-zinc-800/80 rounded-xl bg-zinc-50/20 dark:bg-zinc-950/10">
+                            {edaStats.filter(s => !TOP_10_FEATURES.includes(s.feature)).map((stats) => renderFeatureField(stats.feature))}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
 
                   <button
                     type="submit"
@@ -1023,25 +1131,25 @@ function App() {
                       {/* Probability Gauge Mock */}
                       <div className="space-y-2 max-w-xs mx-auto">
                         <div className="flex justify-between text-xs font-semibold text-zinc-500">
-                          <span>Malignant</span>
-                          <span>Benign</span>
+                          <span>{Object.keys(predictionResult.probabilities)[0]}</span>
+                          <span>{Object.keys(predictionResult.probabilities)[1]}</span>
                         </div>
                         
                         {/* Progress Bar */}
                         <div className="w-full h-3.5 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden flex shadow-inner">
                           <div 
-                            style={{ width: `${predictionResult.probabilities.Malignant}%` }}
+                            style={{ width: `${predictionResult.probabilities[Object.keys(predictionResult.probabilities)[0]]}%` }}
                             className="bg-rose-500 transition-all duration-500" 
                           />
                           <div 
-                            style={{ width: `${predictionResult.probabilities.Benign}%` }}
+                            style={{ width: `${predictionResult.probabilities[Object.keys(predictionResult.probabilities)[1]]}%` }}
                             className="bg-emerald-500 transition-all duration-500" 
                           />
                         </div>
 
                         <div className="flex justify-between text-[10px] font-mono text-zinc-400">
-                          <span>{predictionResult.probabilities.Malignant}%</span>
-                          <span>{predictionResult.probabilities.Benign}%</span>
+                          <span>{predictionResult.probabilities[Object.keys(predictionResult.probabilities)[0]]}%</span>
+                          <span>{predictionResult.probabilities[Object.keys(predictionResult.probabilities)[1]]}%</span>
                         </div>
                       </div>
 
@@ -1054,11 +1162,17 @@ function App() {
                         <AlertCircle className="w-5 h-5 shrink-0" />
                         <div>
                           <strong className="font-bold block mb-1">
-                            {predictionResult.prediction === 0 ? 'Urgent Review Advised' : 'No Immediate Malignancy Detected'}
+                            {predictionResult.prediction === 0
+                              ? (datasetMode === 'seer' ? 'High Mortality Risk Indicated' : 'Urgent Review Advised')
+                              : (datasetMode === 'seer' ? 'High Survival Probability' : 'No Immediate Malignancy Detected')}
                           </strong>
                           {predictionResult.prediction === 0 
-                            ? 'High probability of malignancy. Features demonstrate standard visual properties of aggressive cell masses.' 
-                            : 'Features fall within typical baseline boundaries of benign non-cancerous masses. Continue standard checkups.'}
+                            ? (datasetMode === 'seer' 
+                                ? 'Prognostic features indicate a high probability of mortality. Urgent clinical follow-up is advised.' 
+                                : 'High probability of malignancy. Features demonstrate standard visual properties of aggressive cell masses.')
+                            : (datasetMode === 'seer'
+                                ? 'Clinical profile suggests a favorable prognosis and high survival probability. Continue regular monitoring.'
+                                : 'Features fall within typical baseline boundaries of benign non-cancerous masses. Continue standard checkups.')}
                         </div>
                       </div>
 
@@ -1078,8 +1192,14 @@ function App() {
       {/* ─── Footer ──────────────────────────────────────────────────────────── */}
       <footer className="border-t border-zinc-200 dark:border-zinc-800 py-6 bg-white dark:bg-[#0c0c0f] text-center text-xs text-zinc-500">
         <div className="max-w-[1600px] mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <span className="font-mono">Wisconsin Diagnostic Breast Cancer Classification Systems</span>
-          <span className="text-[10px] px-2 py-1 bg-zinc-100 dark:bg-zinc-900 rounded">Phase 1B — Active Run</span>
+          <span className="font-mono">
+            {datasetMode === 'seer' 
+              ? 'SEER Program Breast Cancer Survival Prognosis Systems' 
+              : 'Wisconsin Diagnostic Breast Cancer Classification Systems'}
+          </span>
+          <span className="text-[10px] px-2 py-1 bg-zinc-100 dark:bg-zinc-900 rounded">
+            {datasetMode === 'seer' ? 'Phase 1C — Active Run (Dev)' : 'Phase 1B — Active Run'}
+          </span>
         </div>
       </footer>
     </div>

@@ -1,0 +1,92 @@
+{
+    "models": [
+        {
+            "name": "KNN",
+            "metrics": {
+                "accuracy": 0.8733,
+                "precision": 0.8867,
+                "recall": 0.9751,
+                "f1": 0.6779,
+                "roc_auc": 0.7573
+            },
+            "parameters": {
+                "n_neighbors": 5,
+                "weights": "distance"
+            },
+            "confusion_matrix_url": "/static/figures/seer/confusion_matrix_knn.png",
+            "feature_importance_url": null
+        },
+        {
+            "name": "Logistic Regression",
+            "metrics": {
+                "accuracy": 0.8137,
+                "precision": 0.9524,
+                "recall": 0.8211,
+                "f1": 0.7204,
+                "roc_auc": 0.8783
+            },
+            "parameters": {
+                "C": 0.1,
+                "penalty": "l2",
+                "solver": "lbfgs"
+            },
+            "confusion_matrix_url": "/static/figures/seer/confusion_matrix_logistic_regression.png",
+            "feature_importance_url": null
+        },
+        {
+            "name": "SVM",
+            "metrics": {
+                "accuracy": 0.8236,
+                "precision": 0.9313,
+                "recall": 0.8548,
+                "f1": 0.7106,
+                "roc_auc": 0.8444
+            },
+            "parameters": {
+                "C": 1,
+                "kernel": "rbf"
+            },
+            "confusion_matrix_url": "/static/figures/seer/confusion_matrix_svm.png",
+            "feature_importance_url": null
+        },
+        {
+            "name": "Random Forest",
+            "metrics": {
+                "accuracy": 0.8994,
+                "precision": 0.9191,
+                "recall": 0.9663,
+                "f1": 0.7791,
+                "roc_auc": 0.8518
+            },
+            "parameters": {
+                "max_depth": 10,
+                "n_estimators": 100
+            },
+            "confusion_matrix_url": "/static/figures/seer/confusion_matrix_random_forest.png",
+            "feature_importance_url": "/static/figures/seer/feature_importance_random_forest.png"
+        },
+        {
+            "name": "MLP",
+            "metrics": {
+                "accuracy": 0.8882,
+                "precision": 0.8989,
+                "recall": 0.978,
+                "f1": 0.7265,
+                "roc_auc": 0.8637
+            },
+            "parameters": {
+                "alpha": 0.001,
+                "hidden_layer_sizes": [
+                    64,
+                    32
+                ]
+            },
+            "confusion_matrix_url": "/static/figures/seer/confusion_matrix_mlp.png",
+            "feature_importance_url": null
+        }
+    ],
+    "overall_plots": {
+        "roc_curves": "/static/figures/seer/roc_curves_all_models.png",
+        "model_comparison": "/static/figures/seer/model_comparison.png"
+    }
+}

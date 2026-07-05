@@ -43,3 +43,6 @@ logs/pipeline.log
 .AppleDouble
 .LSOverride
 Icon
+
+# Temporary scratch folder
+scratch/
