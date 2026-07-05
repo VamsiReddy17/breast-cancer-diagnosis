@@ -1,0 +1,28 @@
+======================================================================
+ BREAST CANCER DIAGNOSIS — EVALUATION REPORT
+======================================================================
+
+Best Model: KNN
+----------------------------------------
+  accuracy       : 0.9649
+  precision      : 0.9595
+  recall         : 0.9861
+  f1             : 0.9726
+  roc_auc        : 0.9714
+
+Per-Model Summary
+----------------------------------------
+    Logistic Regression        F1=0.9645
+    Random Forest              F1=0.9510
+    SVM                        F1=0.9645
+  ★ KNN                        F1=0.9726
+    MLP                        F1=0.9655
+
+Recommendations
+----------------------------------------
+  1. Deploy 'KNN' for production inference.
+  2. Monitor precision-recall trade-off for clinical use-cases.
+  3. Consider ensemble of top-2 models if marginal gains matter.
+  4. Re-evaluate periodically with fresh data.
+
+======================================================================

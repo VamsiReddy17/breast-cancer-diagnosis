@@ -34,15 +34,9 @@ frontend/node_modules/
 frontend/dist/
 .eslintcache
 
-# Logs & Data outputs (optional, but good practice to keep clean)
+# Logs & Data outputs (optional, but keep virtual environment and raw logs clean)
 logs/*.log
 logs/pipeline.log
-reports/figures/*.png
-reports/results/*.csv
-reports/results/*.json
-reports/results/*.txt
-models/*.joblib
-models/*.json
 
 # macOS
 .DS_Store

@@ -1,0 +1,51 @@
+{
+  "Logistic Regression": {
+    "path": "/Users/vamsireddy/Desktop/Agents Dev/breast-cancer-diagnosis/models/logistic_regression_best.joblib",
+    "params": {
+      "C": 1,
+      "class_weight": "balanced",
+      "max_iter": 1000,
+      "penalty": "l2",
+      "solver": "lbfgs"
+    }
+  },
+  "Random Forest": {
+    "path": "/Users/vamsireddy/Desktop/Agents Dev/breast-cancer-diagnosis/models/random_forest_best.joblib",
+    "params": {
+      "class_weight": "balanced",
+      "max_depth": 5,
+      "min_samples_split": 2,
+      "n_estimators": 200
+    }
+  },
+  "SVM": {
+    "path": "/Users/vamsireddy/Desktop/Agents Dev/breast-cancer-diagnosis/models/svm_best.joblib",
+    "params": {
+      "C": 1,
+      "class_weight": "balanced",
+      "gamma": "scale",
+      "kernel": "linear"
+    }
+  },
+  "KNN": {
+    "path": "/Users/vamsireddy/Desktop/Agents Dev/breast-cancer-diagnosis/models/knn_best.joblib",
+    "params": {
+      "metric": "manhattan",
+      "n_neighbors": 3,
+      "weights": "uniform"
+    }
+  },
+  "MLP": {
+    "path": "/Users/vamsireddy/Desktop/Agents Dev/breast-cancer-diagnosis/models/mlp_best.joblib",
+    "params": {
+      "activation": "relu",
+      "alpha": 0.001,
+      "early_stopping": true,
+      "hidden_layer_sizes": [
+        128,
+        64
+      ],
+      "max_iter": 500
+    }
+  }
+}
