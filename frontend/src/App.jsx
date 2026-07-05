@@ -502,7 +502,7 @@ function App() {
           }`}
         >
           <Sliders className="w-3.5 h-3.5" />
-          Diagnosis
+          {datasetMode === 'seer' ? 'Prognosis' : 'Diagnosis'}
         </button>
       </div>
 
@@ -518,11 +518,15 @@ function App() {
             <div className="bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-2xl p-6 md:p-10 shadow-lg relative overflow-hidden">
               <div className="relative z-10 space-y-4">
                 <span className="bg-blue-500/30 text-blue-200 border border-blue-400/30 text-[10px] uppercase font-bold tracking-widest px-2.5 py-1 rounded-full">
-                  Clinical Diagnosis Portal
+                  {datasetMode === 'seer' ? "Clinical Prognosis Portal" : "Clinical Diagnosis Portal"}
                 </span>
-                <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight">OncoSense Diagnosis Explorer</h2>
+                <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight">
+                  {datasetMode === 'seer' ? "OncoSense Prognosis Explorer" : "OncoSense Diagnosis Explorer"}
+                </h2>
                 <p className="text-sm md:text-base text-blue-100 max-w-2xl leading-relaxed">
-                  A high-fidelity machine learning pipeline analyzing fine-needle aspirates (FNA) of breast masses to accurately distinguish between malignant and benign tumor cells.
+                  {datasetMode === 'seer' 
+                    ? "A high-fidelity machine learning pipeline analyzing patient cohort data from the SEER database to accurately predict clinical survival status and outcome probability curves."
+                    : "A high-fidelity machine learning pipeline analyzing fine-needle aspirates (FNA) of breast masses to accurately distinguish between malignant and benign tumor cells."}
                 </p>
               </div>
               <div className="absolute right-0 bottom-0 opacity-10 translate-x-12 translate-y-12 select-none pointer-events-none">
@@ -535,23 +539,44 @@ function App() {
               {/* Medical Explanation */}
               <div className="bg-white dark:bg-[#0c0c0f] border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 shadow-sm space-y-4">
                 <h3 className="text-lg font-bold tracking-tight text-zinc-950 dark:text-zinc-50 border-b border-zinc-100 dark:border-zinc-800 pb-2">
-                  Benign vs. Malignant Cell Diagnosis
+                  {datasetMode === 'seer' ? "SEER Cohort Survival Prognosis" : "Benign vs. Malignant Cell Diagnosis"}
                 </h3>
                 <div className="space-y-3 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
-                  <p>
-                    Breast cancer diagnosis relies on identifying cell abnormalities in biopsies. Cell growths are classified as:
-                  </p>
-                  <ul className="list-disc pl-4 space-y-2">
-                    <li>
-                      <strong className="text-rose-600 dark:text-rose-400 font-bold">Malignant (Class 0):</strong> Cancerous cellular structures. These grow quickly, can invade adjacent breast tissue, and carry the risk of spreading (metastasis) if not treated immediately.
-                    </li>
-                    <li>
-                      <strong className="text-emerald-600 dark:text-emerald-400 font-bold">Benign (Class 1):</strong> Non-cancerous masses. They are localized, slow-growing, and do not threaten surrounding healthy tissues.
-                    </li>
-                  </ul>
-                  <p>
-                    To predict these categories, our system evaluates cytological attributes extracted from biopsies, including cell nucleus shape regularity, perimeter roughness, and area size.
-                  </p>
+                  {datasetMode === 'seer' ? (
+                    <>
+                      <p>
+                        Clinical prognosis modeling analyzes patient cohorts to project survival outcomes. Patient status is classified as:
+                      </p>
+                      <ul className="list-disc pl-4 space-y-2">
+                        <li>
+                          <strong className="text-emerald-600 dark:text-emerald-400 font-bold">Alive (Class 1):</strong> Patients who survived the follow-up observation timeline (censored or surviving cases).
+                        </li>
+                        <li>
+                          <strong className="text-rose-600 dark:text-rose-400 font-bold">Dead (Class 0):</strong> Patients whose death occurred due to breast cancer within the observed time horizon.
+                        </li>
+                      </ul>
+                      <p>
+                        Our predictive model analyzes patient demographics (Age, Race, Marital Status), cancer staging (T Stage, N Stage, 6th Stage), tumor specifications (Size, Grade, differentiate), receptor statuses (Estrogen, Progesterone), and lymph node exams.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p>
+                        Breast cancer diagnosis relies on identifying cell abnormalities in biopsies. Cell growths are classified as:
+                      </p>
+                      <ul className="list-disc pl-4 space-y-2">
+                        <li>
+                          <strong className="text-rose-600 dark:text-rose-400 font-bold">Malignant (Class 0):</strong> Cancerous cellular structures. These grow quickly, can invade adjacent breast tissue, and carry the risk of spreading (metastasis) if not treated immediately.
+                        </li>
+                        <li>
+                          <strong className="text-emerald-600 dark:text-emerald-400 font-bold">Benign (Class 1):</strong> Non-cancerous masses. They are localized, slow-growing, and do not threaten surrounding healthy tissues.
+                        </li>
+                      </ul>
+                      <p>
+                        To predict these categories, our system evaluates cytological attributes extracted from biopsies, including cell nucleus shape regularity, perimeter roughness, and area size.
+                      </p>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -566,13 +591,13 @@ function App() {
                   </p>
                   <ol className="list-decimal pl-4 space-y-3">
                     <li>
-                      <strong>Data & EDA Explorer:</strong> View the raw patient records. Check cytological stats (minimums, maximums, standard averages) and visual distributions.
+                      <strong>Data & EDA Explorer:</strong> View the raw patient records. Check {datasetMode === 'seer' ? 'clinical stats (demographics, staging, sizes)' : 'cytological stats (minimums, maximums, standard averages)'} and visual distributions.
                     </li>
                     <li>
-                      <strong>Models Dashboard:</strong> Review performance scores. Non-technical users should look at **Recall** (catching tumors) and **Precision** (avoiding false alarms).
+                      <strong>Models Dashboard:</strong> Review performance scores. Non-technical users should look at **Recall** ({datasetMode === 'seer' ? 'catching deceased cases' : 'catching tumors'}) and **Precision** (avoiding false alarms).
                     </li>
                     <li>
-                      <strong>Live Diagnosis:</strong> Use preset patient templates or input values manually to observe real-time AI classification scores.
+                      <strong>Live {datasetMode === 'seer' ? 'Prognosis' : 'Diagnosis'}:</strong> Use preset patient templates or input values manually to observe real-time AI classification scores.
                     </li>
                   </ol>
                 </div>
@@ -581,18 +606,22 @@ function App() {
 
             {/* Metrics Explanation Cards */}
             <div className="bg-white dark:bg-[#0c0c0f] border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 shadow-sm space-y-4">
-              <h3 className="text-base font-bold tracking-tight">Understanding Diagnosis Metrics (Layperson's Guide)</h3>
+              <h3 className="text-base font-bold tracking-tight">Understanding {datasetMode === 'seer' ? 'Prognosis' : 'Diagnosis'} Metrics (Layperson's Guide)</h3>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="p-4 bg-zinc-50 dark:bg-zinc-900/40 rounded-xl border border-zinc-100 dark:border-zinc-800 space-y-2">
                   <div className="text-xs font-bold text-blue-600 dark:text-blue-400 font-mono">1. RECALL (SENSITIVITY)</div>
                   <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                    <strong>The Safety Metric:</strong> "How many of the actual malignant tumors did the model catch?" A 98% recall means we successfully diagnosed 98 out of 100 cancer cases. In clinical oncology, high recall is vital to prevent untreated tumors.
+                    <strong>The Safety Metric:</strong> {datasetMode === 'seer' 
+                      ? '"How many of the actual high-risk deceased outcomes did the model catch?" A 98% recall means we successfully identified 98 out of 100 mortality risk cases, allowing critical medical adjustments.' 
+                      : '"How many of the actual malignant tumors did the model catch?" A 98% recall means we successfully diagnosed 98 out of 100 cancer cases. In clinical oncology, high recall is vital to prevent untreated tumors.'}
                   </p>
                 </div>
                 <div className="p-4 bg-zinc-50 dark:bg-zinc-900/40 rounded-xl border border-zinc-100 dark:border-zinc-800 space-y-2">
                   <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 font-mono">2. PRECISION</div>
                   <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                    <strong>The Accuracy Guarantee:</strong> "When the model flags a case as malignant, how often is it right?" High precision minimizes false alarms (benign masses mistaken for cancer), sparing patients from unnecessary anxiety.
+                    <strong>The Accuracy Guarantee:</strong> {datasetMode === 'seer' 
+                      ? '"When the model projects a surviving outcome, how often is it correct?" High precision guarantees prognosis validity, preventing false clinical security.' 
+                      : '"When the model flags a case as malignant, how often is it right?" High precision minimizes false alarms (benign masses mistaken for cancer), sparing patients from unnecessary anxiety.'}
                   </p>
                 </div>
                 <div className="p-4 bg-zinc-50 dark:bg-zinc-900/40 rounded-xl border border-zinc-100 dark:border-zinc-800 space-y-2">
@@ -615,7 +644,9 @@ function App() {
             <div>
               <h2 className="text-2xl font-bold tracking-tight">Data & EDA Explorer</h2>
               <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                Explore the Wisconsin Breast Cancer Dataset and examine the exploratory data analysis plots.
+                {datasetMode === 'seer' 
+                  ? "Explore the SEER Patient Cohort Breast Cancer Dataset and examine the exploratory data analysis plots."
+                  : "Explore the Wisconsin Breast Cancer Dataset and examine the exploratory data analysis plots."}
               </p>
             </div>
 
