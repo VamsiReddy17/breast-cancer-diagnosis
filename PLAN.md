@@ -1,7 +1,7 @@
 # Project Plan — Breast Cancer Diagnosis
 
-> **Last Updated**: 2026-07-04
-> **Status**: Phase 1A — Completed (Phase 1B — Planned)
+> **Last Updated**: 2026-07-05
+> **Status**: Phase 1B — Completed (Phase 1C — Planned)
 
 ---
 
@@ -60,37 +60,38 @@
 
 ---
 
-## Phase 1B: React + FastAPI Web Application (In Progress)
+## Phase 1B: React + FastAPI Web Application ✅
 
-### Milestone 8: Backend API Development
-- [ ] Save fitted scaler in training pipeline (`models/scaler.joblib`)
-- [ ] Create `src/api.py` using FastAPI
-- [ ] Endpoint `/api/data` for paginated, searchable tabular raw data
-- [ ] Endpoint `/api/eda` for statistical summaries and figure asset maps
-- [ ] Endpoint `/api/models` for comparison metrics and manifest parameters
-- [ ] Endpoint `/api/predict` for processing input features and returning inference outcomes
+### Milestone 8: Backend API Development ✅
+- [x] Save fitted scaler in training pipeline (`models/scaler.joblib`)
+- [x] Create `src/api.py` using FastAPI
+- [x] Endpoint `/api/data` for paginated, searchable tabular raw data
+- [x] Endpoint `/api/eda` for statistical summaries and figure asset maps
+- [x] Endpoint `/api/models` for comparison metrics and manifest parameters
+- [x] Endpoint `/api/predict` for processing input features and returning inference outcomes
 
-### Milestone 9: Frontend Initialization & Setup
-- [ ] Initialize Vite + React project in `frontend/`
-- [ ] Setup visual layout matching Zinc color palette and light/dark theme toggle
-- [ ] Configure Axios and ECharts
+### Milestone 9: Frontend Initialization & Setup ✅
+- [x] Initialize Vite + React project in `frontend/`
+- [x] Setup visual layout matching Zinc color palette and light/dark theme toggle
+- [x] Configure Axios and ECharts
 
-### Milestone 10: Tab 1 — Data & EDA Explorer
-- [ ] Implement Excel-like paginated table showing raw sample rows
-- [ ] Display visual charts (correlation heatmap, distributions)
+### Milestone 10: Tab 1 — Data & EDA Explorer ✅
+- [x] Implement Excel-like paginated table showing raw sample rows with horizontal scrollbar
+- [x] Display visual charts (correlation heatmap, distributions)
 
-### Milestone 11: Tab 2 — Model Comparison & Performance
-- [ ] Add KPI dashboard cards of primary metric
-- [ ] Integrate interactive model comparison charts and selectable confusion matrix visuals
+### Milestone 11: Tab 2 — Model Comparison & Performance ✅
+- [x] Add KPI dashboard cards of primary metric
+- [x] Integrate interactive model comparison charts and selectable confusion matrix visuals
 
-### Milestone 12: Tab 3 — Live Diagnosis Form (Inference)
-- [ ] Build feature input form with pre-defined ranges and model selector dropdown
-- [ ] Create "Prefill Random Sample" helper buttons (Benign / Malignant presets)
-- [ ] Setup prediction result viewer showing diagnosis classification & confidence gauges
+### Milestone 12: Tab 3 — Live Diagnosis Form (Inference) ✅
+- [x] Build feature input form with pre-defined ranges and model selector dropdown
+- [x] Create "Prefill Random Sample" helper buttons (Benign / Malignant presets)
+- [x] Setup prediction result viewer showing diagnosis classification & confidence gauges
 
-### Milestone 13: E2E Verification & Integration
-- [ ] Write integration test cases (`tests/test_api.py`)
-- [ ] Confirm layout aesthetics and functionality with browser subagent
+### Milestone 13: E2E Verification & Integration ✅
+- [x] Write integration test cases (`tests/test_api.py`)
+- [x] Confirm layout aesthetics and functionality with browser subagent
+- [x] Successfully deploy application services live on Render and Vercel
 
 ---
 
