@@ -80,6 +80,14 @@ def get_raw_data_path() -> str:
         raise HTTPException(status_code=500, detail="Raw data file not found. Please run pipeline first.")
     return path
 
+
+# ─── Inference Schema ───────────────────────────────────────────────────────────
+
+class InferenceRequest(BaseModel):
+    model_name: str = Field(..., description="Name of the model to use (e.g., 'KNN', 'Logistic Regression')")
+    features: Dict[str, float] = Field(..., description="Dict mapping features to their float values")
+
+
 # ─── API Routes ─────────────────────────────────────────────────────────────────
 
 @app.get("/api/health")
@@ -230,13 +238,209 @@ def get_model_details():
         "models": formatted_models,
         "overall_plots": overall_plots
     }
+# ─── SEER Clinical API Routes ──────────────────────────────────────────────────
+
+SEER_MODELS_DIR = os.path.join(MODELS_DIR, "seer")
+PROCESSED_DATA_DIR = os.path.join(PROJECT_ROOT, "data", "processed")
+
+def get_seer_data_path() -> str:
+    path = os.path.join(PROCESSED_DATA_DIR, "seer_processed.csv")
+    if not os.path.exists(path):
+        logger.info("⚠️ SEER processed dataset is missing. Running SEER pipeline...")
+        try:
+            from src.seer_pipeline import run_seer_pipeline
+            run_seer_pipeline()
+            logger.info("✅ SEER pipeline completed successfully.")
+        except Exception as e:
+            logger.error(f"❌ Failed to run SEER pipeline: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"SEER data missing. Failed to run pipeline: {str(e)}")
+    return path
+
+@app.get("/api/seer/data")
+def get_seer_data(
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    search: str = Query(None),
+    target: int = Query(None, ge=0, le=1)
+):
+    """
+    Get a paginated, searchable list of SEER raw/processed clinical dataset records.
+    """
+    csv_path = get_seer_data_path()
+    df = pd.read_csv(csv_path)
+    
+    if "id" not in df.columns:
+        df.insert(0, "id", range(1, len(df) + 1))
+
+    if search:
+        search = search.lower()
+        mask = df.astype(str).apply(lambda x: x.str.lower().str.contains(search)).any(axis=1)
+        df = df[mask]
+
+    if target is not None:
+        df = df[df["target"] == target]
+
+    total_records = len(df)
+    total_pages = int(np.ceil(total_records / size))
+    
+    start_idx = (page - 1) * size
+    end_idx = start_idx + size
+    sliced_df = df.iloc[start_idx:end_idx]
+
+    records = sliced_df.to_dict(orient="records")
+
+    return {
+        "page": page,
+        "size": size,
+        "total_records": total_records,
+        "total_pages": total_pages,
+        "columns": list(df.columns),
+        "data": records
+    }
 
 
-# ─── Inference Schema ───────────────────────────────────────────────────────────
+@app.get("/api/seer/data/random")
+def get_seer_random_sample(target: int = Query(None, ge=0, le=1)):
+    """
+    Returns a random sample from the SEER dataset for pre-filling form inputs.
+    """
+    csv_path = get_seer_data_path()
+    df = pd.read_csv(csv_path)
+    
+    if target is not None:
+        filtered_df = df[df["target"] == target]
+        if len(filtered_df) == 0:
+            raise HTTPException(status_code=404, detail=f"No samples with target={target}")
+        sample = filtered_df.sample(1, random_state=np.random.randint(1, 10000))
+    else:
+        sample = df.sample(1, random_state=np.random.randint(1, 10000))
 
-class InferenceRequest(BaseModel):
-    model_name: str = Field(..., description="Name of the model to use (e.g., 'KNN', 'Logistic Regression')")
-    features: Dict[str, float] = Field(..., description="Dict mapping 30 Wisconsin features to their float values")
+    return sample.to_dict(orient="records")[0]
+
+
+@app.get("/api/seer/eda")
+def get_seer_eda_details():
+    """
+    Returns summary stats and filenames of generated figures for the SEER dataset.
+    """
+    csv_path = get_seer_data_path()
+    df = pd.read_csv(csv_path)
+    
+    # Exclude non-feature columns
+    features_df = df.drop(columns=["target", "id"], errors="ignore")
+    summary = features_df.describe().T
+    summary["skew"] = features_df.skew()
+    summary["kurtosis"] = features_df.kurtosis()
+    summary = summary.round(4)
+    summary.index.name = "feature"
+    stats_list = summary.reset_index().to_dict(orient="records")
+
+    plots = [
+        {"name": "Class Distribution", "filename": "seer/class_distribution.png", "type": "bar"},
+        {"name": "Correlation Heatmap", "filename": "seer/correlation_heatmap.png", "type": "heatmap"},
+        {"name": "Age across Stages", "filename": "seer/feature_distributions_violin.png", "type": "box"},
+        {"name": "Mutual Information Clinical Relevance", "filename": "seer/mutual_info_scores.png", "type": "bar"}
+    ]
+
+    return {
+        "statistical_summary": stats_list,
+        "plots": plots,
+        "base_url": "/static/figures/"
+    }
+
+
+@app.get("/api/seer/models")
+def get_seer_model_details():
+    """
+    Returns metrics comparison and configuration of all SEER models.
+    """
+    comparison_path = os.path.join(RESULTS_DIR, "seer_model_comparison.json")
+    if not os.path.exists(comparison_path):
+        get_seer_data_path()
+        
+    if not os.path.exists(comparison_path):
+        raise HTTPException(status_code=500, detail="SEER model comparison results missing.")
+        
+    return load_json(comparison_path)
+
+
+@app.post("/api/seer/predict")
+def run_seer_prediction(payload: InferenceRequest):
+    """
+    Accepts 15 SEER clinical features, scales them, and runs inference.
+    """
+    try:
+        scaler_path = os.path.join(SEER_MODELS_DIR, "scaler.joblib")
+        if not os.path.exists(scaler_path):
+            get_seer_data_path()
+            
+        if not os.path.exists(scaler_path):
+            raise HTTPException(status_code=500, detail="SEER fitted scaler missing.")
+        
+        scaler = joblib.load(scaler_path)
+        
+        safe_model_name = payload.model_name.lower().replace(" ", "_")
+        model_path = os.path.join(SEER_MODELS_DIR, f"{safe_model_name}_best.joblib")
+        
+        if not os.path.exists(model_path):
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Fitted model '{payload.model_name}' not found for SEER. Supported: KNN, MLP, SVM, Random Forest, Logistic Regression"
+            )
+        
+        model = joblib.load(model_path)
+        
+        seer_columns = [
+            'Age', 'Race', 'Marital Status', 'T_stage', 'N Stage', '6th Stage',
+            'differentiate', 'Grade', 'A Stage', 'Tumor Size', 'Estrogen Status',
+            'Progesterone Status', 'Regional Node Examined', 'Reginol Node Positive',
+            'Survival Months'
+        ]
+
+        missing_features = [col for col in seer_columns if col not in payload.features]
+        if missing_features:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Incomplete clinical features. Missing columns: {missing_features}"
+            )
+
+        input_df = pd.DataFrame([payload.features])[seer_columns]
+        scaled_array = scaler.transform(input_df)
+        scaled_df = pd.DataFrame(scaled_array, columns=seer_columns)
+        
+        prediction_idx = int(model.predict(scaled_df)[0])
+        
+        probabilities = [0.0, 0.0]
+        if hasattr(model, "predict_proba"):
+            probabilities = [float(p) for p in model.predict_proba(scaled_df)[0]]
+        elif hasattr(model, "decision_function"):
+            decision = float(model.decision_function(scaled_df)[0])
+            p1 = 1 / (1 + np.exp(-decision))
+            probabilities = [1 - p1, p1]
+        else:
+            probabilities[prediction_idx] = 1.0
+
+        class_names = ["Dead", "Alive"]
+        class_name = class_names[prediction_idx]
+        
+        return {
+            "model_used": payload.model_name,
+            "prediction": prediction_idx,
+            "class_label": class_name,
+            "confidence": round(probabilities[prediction_idx] * 100, 2),
+            "probabilities": {
+                "Dead": round(probabilities[0] * 100, 2),
+                "Alive": round(probabilities[1] * 100, 2)
+            }
+        }
+    except Exception as e:
+        import traceback
+        err_msg = f"SEER inference failed: {str(e)}\n{traceback.format_exc()}"
+        logger.error(err_msg)
+        raise HTTPException(status_code=500, detail=err_msg)
+
+
+
 
 
 @app.post("/api/predict")
@@ -347,7 +551,10 @@ def get_debug_info():
         "scaler_exists": os.path.exists(os.path.join(MODELS_DIR, "scaler.joblib")),
         "model_manifest_exists": os.path.exists(os.path.join(MODELS_DIR, "model_manifest.json")),
         "figures_dir_exists": os.path.exists(FIGURES_DIR),
-        "figures_list": os.listdir(FIGURES_DIR) if os.path.exists(FIGURES_DIR) else []
+        "figures_list": os.listdir(FIGURES_DIR) if os.path.exists(FIGURES_DIR) else [],
+        "seer_model_comparison_exists": os.path.exists(os.path.join(RESULTS_DIR, "seer_model_comparison.json")),
+        "seer_scaler_exists": os.path.exists(os.path.join(SEER_MODELS_DIR, "scaler.joblib")),
+        "seer_figures_list": os.listdir(os.path.join(FIGURES_DIR, "seer")) if os.path.exists(os.path.join(FIGURES_DIR, "seer")) else []
     }
             
     return {
