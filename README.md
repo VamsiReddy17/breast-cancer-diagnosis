@@ -1,61 +1,55 @@
-# OncoSense — Breast Cancer Diagnosis
+# OncoSense — Unified Breast Cancer Diagnosis & Prognosis Pipeline
 
-A production-grade breast cancer classification system using the Wisconsin Diagnostic dataset, complete with a self-documenting machine learning pipeline and a dual-service React + FastAPI web application.
-
-## 🖥️ Portal Interface Screenshots
-
-### 1. Default Portal Home View
-Detailed layperson guides to classification concepts (Benign vs Malignant) and mathematical metrics.
-![OncoSense Portal Home](docs/images/home_tab.png)
-
-### 2. Scrollable Data Table Explorer
-A spreadsheet view displaying all 30 cytological features with a horizontal scrollbar.
-![Data Table Explorer](docs/images/data_explorer.png)
-
-### 3. Models Comparison Dashboard
-ECharts visualizations of accuracy, precision, recall, and F1 across five classical ML models, with individual confusion matrix selectors.
-![Models Dashboard](docs/images/models_dashboard.png)
-
-### 4. Interactive Live Diagnosis Form
-Test classification predictions in real-time using patient records or customized input values.
-![Live Diagnosis](docs/images/live_diagnosis.png)
+OncoSense is a production-grade, multi-modal clinical intelligence portal for breast cancer classification. It combines tabular cytological diagnosis, clinical staging survival prognosis, and deep learning histopathology image classification in a unified web application.
 
 ---
 
-## 🎯 Project Goal
-Build a self-documenting, error-tracking ML pipeline for breast cancer diagnosis (benign vs malignant) using classical ML models.
+## 🖥️ Portal Interface Features
 
-## 📊 Dataset
-- **Name**: Wisconsin Breast Cancer Diagnostic
-- **Samples**: 569 (357 benign, 212 malignant)
-- **Features**: 30 numeric features (radius, texture, perimeter, area, smoothness, etc.)
-- **Source**: Built-in `sklearn.datasets`
+### 1. Wisconsin Cytology Diagnosis (Phase 1A & 1B)
+*   Spreadsheet raw data explorer of 30 numeric cytological features.
+*   ECharts comparison visualization of **5 classical ML models** (KNN, SVM, Random Forest, Logistic Regression, MLP).
+*   Live numerical diagnosis inference panel.
+
+### 2. SEER Clinical Survival Prognosis (Phase 1C)
+*   Ingestion and scaling of the **4,024-patient SEER staging cohort**.
+*   Real-time mortality/survival prediction based on clinical features (Staging, Tumor Size, Grade, Hormonal Receptor statuses).
+*   Dynamic comparison plots and clinical correlation heatmaps.
+
+### 3. Histopathology Image Classifier (Phase 2)
+*   **EfficientNet-B0 CNN** binary classification (Benign vs. Malignant) trained on histopathology images.
+*   Drag-and-drop file uploader with class logit probabilities and metric progress gauges.
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Getting Started
 
 ### 1. Setup & Installation
 ```bash
-# Create virtual environment
+# Create and activate virtual environment
 python3 -m venv venv
 source venv/bin/activate
 
-# Install pipeline and backend dependencies
+# Install backend dependencies
 pip install -r requirements.txt
 ```
 
-### 2. Run Data & Training Pipeline
-Runs the end-to-end ML training pipeline, logs step-by-step statuses, and saves metrics/models.
-```bash
-python src/pipeline.py
-```
+### 2. Running the Training Pipelines
+Centralized deep learning configurations live in `config/deep_learning.yaml`. You can trigger either ML flow using the unified orchestrator:
 
-### 3. Run Web Application Services
+*   **Train Classical ML (Wisconsin & SEER)**:
+    ```bash
+    python src/pipeline.py
+    ```
+*   **Train Deep Learning CNN (BreaKHis)**:
+    ```bash
+    python src/pipeline.py --cnn
+    ```
+
+### 3. Running Web Application Services Locally
 
 **A. Start FastAPI Backend:**
 ```bash
-# From project root
 source venv/bin/activate
 python src/api.py
 ```
@@ -63,52 +57,39 @@ python src/api.py
 
 **B. Start Vite React Frontend:**
 ```bash
-# From project root
 cd frontend
 npm install
 npm run dev
 ```
 *Dashboard portal runs at `http://localhost:5173`.*
 
-### 4. Run Test Suite
+### 4. Running the Test Suite
 ```bash
-# Run core pipeline + API endpoint integration tests
-python -m pytest tests/ -v
+./venv/bin/pytest
 ```
 
 ---
 
-## 📁 Project Structure
-```
-breast-cancer-diagnosis/
-├── README.md               # This file
-├── PLAN.md                 # Living project plan
-├── TRACKER.md              # Issue tracker (error memory)
-├── CHANGELOG.md            # Version history
-├── requirements.txt        # Backend dependencies
-├── config/config.py        # Centralized configuration
-├── docs/images/            # Application interface screenshots
-├── data/                   # Raw + processed data
-├── frontend/               # Vite + React + Tailwind CSS client portal
-├── src/                    # Source code
-│   ├── api.py              # FastAPI backend server
-│   ├── data_loader.py      # Data loading & validation
-│   ├── eda.py              # Exploratory Data Analysis
-│   ├── feature_engineering.py  # Feature processing & scaler export
-│   ├── model_training.py   # Model training (5 models)
-│   ├── evaluation.py       # Metrics & visualization
-│   ├── pipeline.py         # End-to-end orchestrator
-│   └── utils.py            # Logging & helpers
-├── models/                 # Saved model and scaler artifacts
-├── reports/                # Plots & result CSVs
-└── tests/                  # Automated test suite (including test_api.py)
-```
+## ☁️ Deployment Environment Configuration
 
-## 🔄 Phases
+### Frontend (Vercel)
+Set the environment variable:
+*   `VITE_API_BASE_URL`: *[Your hosted Render backend API URL]*
+
+### Backend (Render)
+To keep the Git repository lightweight, `.pth` binary weights are ignored in Git. To make the **Image Classifier** work on the live server, configure:
+*   `DL_MODEL_WEIGHTS_URL`: The direct download URL of your trained `best_model.pth` file (e.g., hosted on GitHub Releases, Dropbox, or GCS). 
+    
+    *On startup, the FastAPI backend will automatically download and cache the model weights from this URL.*
+
+---
+
+## 🔄 Project Phase Status
+
 | Phase | Description | Status |
 |-------|-------------|--------|
-| 1A | Wisconsin dataset + Classical ML | ✅ Completed |
-| 1B | React + FastAPI Interactive Web App | ✅ Completed |
-| 1C | SEER dataset (~4M records) | ⬜ Planned |
-| 2  | Image-based DL (BreakHis/CBIS-DDSM) | ⬜ Planned |
+| **Phase 1A** | Wisconsin Dataset + 6 Classical ML Classifiers | ✅ Completed |
+| **Phase 1B** | Interactive React + FastAPI Dashboard App | ✅ Completed |
+| **Phase 1C** | SEER Dataset Ingestion, Grid Search Tuning, & Risk Prognosis | ✅ Completed |
+| **Phase 2**  | PyTorch EfficientNet-B0 CNN Image Classifier | ✅ Completed |
 
