@@ -54,3 +54,9 @@ kaggle.json
 data/raw/images/
 models/**/*.pth
 models/**/*.joblib
+
+# Environment Secrets
+.env
+.env.local
+.env.*
+backend.env
