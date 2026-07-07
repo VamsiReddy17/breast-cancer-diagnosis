@@ -60,3 +60,7 @@ models/**/*.joblib
 .env.local
 .env.*
 backend.env
+
+# Launch Scripts
+bat/
+*.pid
