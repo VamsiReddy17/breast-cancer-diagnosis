@@ -9,27 +9,9 @@ OncoSense is a production-grade, multi-modal clinical intelligence application f
 
 ## 🏗️ System Architecture
 
-```
-                      ┌─────────────────────────────────┐
-                      │    Vercel Static CDN Hosting    │
-                      │  (Vite + React + Tailwind UI)   │
-                      └────────────────┬────────────────┘
-                                       │
-                                       │ HTTP JSON & Multipart Uploads
-                                       ▼
-                      ┌─────────────────────────────────┐
-                      │    Render Container Service     │
-                      │   (FastAPI Backend Python API)  │
-                      └──────────────┬───┬──────────────┘
-                                     │   │
-         ┌───────────────────────────┘   └──────────────────────────┐
-         ▼                                                          ▼
-  [ Classical & Clinical Pipelines ]                     [ Deep Learning CNN Model ]
-  * Ingests Scikit-Learn Cytology                        * EfficientNet-B0 Backbone
-  * Ingests 4,024 SEER Patient Records                   * 70/15/15 Deterministic Splits
-  * Scaled Feature Engineering                           * Self-Healing Weight Fetching
-  * Grid Search cv-opt Parameters                        * PyTorch Inference Engine
-```
+The following block diagram outlines the decoupled full-stack architecture of OncoSense, detailing the user authentication, diagnostic pipeline, and usage telemetry tracing flows:
+
+![OncoSense Software Architecture](docs/assets/oncosense_architecture_diagram.png)
 
 ---
 
