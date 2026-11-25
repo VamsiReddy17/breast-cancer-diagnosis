@@ -28,8 +28,23 @@ if (!supabaseInstance) {
       signOut: async () => {},
     },
     from: () => ({
-      insert: async () => ({ error: new Error("Supabase not configured.") })
-    })
+      insert: async () => ({ error: new Error("Supabase not configured.") }),
+      upsert: async () => ({ error: new Error("Supabase not configured.") }),
+      select: () => ({
+        eq: () => ({
+          maybeSingle: async () => ({ data: null, error: null }),
+          order: () => ({
+            limit: async () => ({ data: [], error: null })
+          })
+        })
+      })
+    }),
+    storage: {
+      from: () => ({
+        upload: async () => ({ data: null, error: new Error("Supabase not configured.") }),
+        createSignedUrl: async () => ({ data: null, error: new Error("Supabase not configured.") })
+      })
+    }
   };
 }
 

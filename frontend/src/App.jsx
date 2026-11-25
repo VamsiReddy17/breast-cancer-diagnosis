@@ -20,7 +20,10 @@ import {
   Camera,
   LogIn,
   LogOut,
-  User
+  User,
+  History,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -77,19 +80,106 @@ function App() {
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [userUsage, setUserUsage] = useState(null);
+  const [auditHistory, setAuditHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [expandedLogId, setExpandedLogId] = useState(null);
+
+  const fetchUserTrackingData = async (userId) => {
+    if (!userId) return;
+    setLoadingHistory(true);
+    try {
+      const [{ data: usageData, error: usageError }, { data: logsData, error: logsError }] = await Promise.all([
+        supabase
+          .from('user_usage')
+          .select('*')
+          .eq('user_id', userId)
+          .maybeSingle(),
+        supabase
+          .from('audit_logs')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(50)
+      ]);
+
+      if (usageError) {
+        console.warn("Failed to load user usage:", usageError.message);
+      } else {
+        setUserUsage(usageData);
+      }
+
+      if (logsError) {
+        console.warn("Failed to load audit logs:", logsError.message);
+      } else {
+        const enrichedLogs = await Promise.all(
+          (logsData || []).map(async (row) => {
+            if (!row.image_path) return row;
+            try {
+              const { data: signedData } = await supabase.storage
+                .from('biopsy-images')
+                .createSignedUrl(row.image_path, 3600);
+              return { ...row, signed_image_url: signedData?.signedUrl || row.image_url || null };
+            } catch {
+              return row;
+            }
+          })
+        );
+        setAuditHistory(enrichedLogs);
+      }
+    } catch (err) {
+      console.warn("Error fetching tracking data:", err);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const syncUserProfile = async (authUser) => {
+    if (!authUser) {
+      setUserUsage(null);
+      setAuditHistory([]);
+      return;
+    }
+    try {
+      const fullName = authUser.user_metadata?.full_name || authUser.user_metadata?.name || '';
+      const avatarUrl = authUser.user_metadata?.avatar_url || null;
+      const { error } = await supabase
+        .from('user_usage')
+        .upsert(
+          {
+            user_id: authUser.id,
+            user_email: authUser.email || '',
+            full_name: fullName,
+            avatar_url: avatarUrl,
+            last_sign_in_at: new Date().toISOString()
+          },
+          { onConflict: 'user_id' }
+        );
+      if (error) {
+        console.warn("Failed to sync user profile:", error.message);
+      }
+    } catch (err) {
+      console.warn("User profile sync skipped:", err);
+    }
+    await fetchUserTrackingData(authUser.id);
+  };
 
   // Subscribe to Auth state changes
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      setUser(session?.user ?? null);
+      const authUser = session?.user ?? null;
+      setUser(authUser);
       setAuthLoading(false);
+      if (authUser) syncUserProfile(authUser);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      setUser(session?.user ?? null);
+      const authUser = session?.user ?? null;
+      setUser(authUser);
       setAuthLoading(false);
+      syncUserProfile(authUser);
     });
 
     return () => subscription.unsubscribe();
@@ -117,24 +207,71 @@ function App() {
     }
   };
 
-  const logPredictionAudit = async (type, result) => {
+  const uploadBiopsyImageToStorage = async (file, userId) => {
+    if (!file || !userId) return { imagePath: null };
+    try {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const filePath = `${userId}/${Date.now()}_${safeName}`;
+      const { error } = await supabase.storage
+        .from('biopsy-images')
+        .upload(filePath, file, { contentType: file.type || 'image/png', upsert: false });
+      if (error) {
+        console.warn("Biopsy image upload skipped:", error.message);
+        return { imagePath: null };
+      }
+      return { imagePath: filePath };
+    } catch (err) {
+      console.warn("Failed to upload biopsy image:", err);
+      return { imagePath: null };
+    }
+  };
+
+  const logPredictionAudit = async ({
+    predictionType,
+    modelUsed = null,
+    result,
+    confidence = null,
+    inputValues = null,
+    predictionDetails = null,
+    imagePath = null
+  }) => {
     try {
       const currentSession = await supabase.auth.getSession();
       const currentUser = currentSession.data.session?.user;
       if (!currentUser) return;
 
-      const { error } = await supabase
-        .from('audit_logs')
-        .insert([
+      const fullPayload = {
+        user_id: currentUser.id,
+        user_email: currentUser.email,
+        prediction_type: predictionType,
+        model_used: modelUsed,
+        result,
+        confidence,
+        input_values: inputValues,
+        prediction_details: predictionDetails,
+        image_path: imagePath
+      };
+
+      let { error } = await supabase.from('audit_logs').insert([fullPayload]);
+
+      // Fallback to baseline 4-column insert if 02_full_tracking.sql hasn't been applied yet
+      if (error) {
+        console.warn("Full audit log insert failed, retrying baseline schema:", error.message);
+        const fallback = await supabase.from('audit_logs').insert([
           {
             user_id: currentUser.id,
             user_email: currentUser.email,
-            prediction_type: type,
-            result: result
+            prediction_type: predictionType,
+            result
           }
         ]);
+        error = fallback.error;
+      }
+
       if (error) {
         console.warn("Failed to insert audit log:", error.message);
+      } else {
+        fetchUserTrackingData(currentUser.id);
       }
     } catch (err) {
       console.warn("Failed to log audit details:", err);
@@ -324,9 +461,16 @@ function App() {
         features: features
       });
       setPredictionResult(response.data);
-      // Log prediction audit details in Supabase
+      // Log prediction audit details (detector, model, confidence, input values, output) in Supabase
       const label = response.data.class_label || (response.data.prediction === 1 ? 'Malignant / High Risk' : 'Benign / Low Risk');
-      logPredictionAudit(datasetMode === 'seer' ? 'SEER Clinical Prognosis' : 'Wisconsin Cytology Diagnosis', label);
+      logPredictionAudit({
+        predictionType: datasetMode === 'seer' ? 'SEER Clinical Prognosis' : 'Wisconsin Cytology Diagnosis',
+        modelUsed: response.data.model_used || predictorModel,
+        result: label,
+        confidence: response.data.confidence ?? null,
+        inputValues: { ...features },
+        predictionDetails: response.data
+      });
     } catch (err) {
       console.error("Prediction failed:", err);
       setPredictionError(err.response?.data?.detail || "An unexpected error occurred during prediction.");
@@ -361,8 +505,21 @@ function App() {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       setImagePrediction(response.data);
-      // Log prediction audit details in Supabase
-      logPredictionAudit('Histopathology Image Classification', response.data.class_label);
+      // Upload posted biopsy image to Supabase Storage and log full audit record
+      const { imagePath } = await uploadBiopsyImageToStorage(imageFile, user?.id);
+      logPredictionAudit({
+        predictionType: 'Histopathology Image Classification',
+        modelUsed: response.data.model_used || 'EfficientNet-B0 CNN',
+        result: response.data.class_label,
+        confidence: response.data.confidence ?? null,
+        inputValues: {
+          filename: imageFile.name,
+          size_bytes: imageFile.size,
+          mime_type: imageFile.type || 'image/unknown'
+        },
+        predictionDetails: response.data,
+        imagePath
+      });
     } catch (err) {
       console.error('Image prediction failed:', err);
       setImageError(err.response?.data?.detail || 'An unexpected error occurred during image prediction.');
@@ -611,6 +768,17 @@ function App() {
               <Camera className="w-4 h-4" />
               Image Classifier
             </button>
+            <button
+              onClick={() => setActiveTab('history')}
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-all ${
+                activeTab === 'history' 
+                  ? 'bg-white dark:bg-zinc-800 text-blue-600 dark:text-blue-400 shadow-sm' 
+                  : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+              }`}
+            >
+              <History className="w-4 h-4" />
+              Activity & Usage
+            </button>
           </nav>
 
           <div className="flex items-center gap-2">
@@ -719,6 +887,15 @@ function App() {
         >
           <Camera className="w-3.5 h-3.5" />
           Image
+        </button>
+        <button
+          onClick={() => setActiveTab('history')}
+          className={`flex-1 flex justify-center items-center gap-1.5 py-2 text-xs font-semibold rounded-md transition-all ${
+            activeTab === 'history' ? 'bg-white dark:bg-zinc-800 text-blue-600' : 'text-zinc-500'
+          }`}
+        >
+          <History className="w-3.5 h-3.5" />
+          Activity
         </button>
       </div>
 
@@ -845,6 +1022,45 @@ function App() {
                   <div className="absolute right-0 bottom-0 opacity-10 translate-x-12 translate-y-12 select-none pointer-events-none">
                     <Activity className="w-80 h-80" />
                   </div>
+                </div>
+
+                {/* Live Supabase Account & Usage Summary */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="bg-white dark:bg-[#0c0c0f] border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 shadow-sm">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">Signed-In Account</div>
+                    <div className="text-sm font-bold mt-1 truncate">{user.user_metadata?.full_name || user.email}</div>
+                    <div className="text-[11px] text-zinc-500 truncate">{user.email}</div>
+                  </div>
+                  <div className="bg-white dark:bg-[#0c0c0f] border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 shadow-sm">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">Total Predictions</div>
+                    <div className="text-2xl font-black text-blue-600 dark:text-blue-400 mt-1">
+                      {userUsage?.total_predictions ?? auditHistory.length}
+                    </div>
+                    <div className="text-[11px] text-zinc-500">Tracked across all detectors</div>
+                  </div>
+                  <div className="bg-white dark:bg-[#0c0c0f] border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 shadow-sm">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">Image Analyses</div>
+                    <div className="text-2xl font-black text-indigo-600 dark:text-indigo-400 mt-1">
+                      {userUsage?.image_predictions ?? 0}
+                    </div>
+                    <div className="text-[11px] text-zinc-500">Histopathology CNN scans</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('history')}
+                    className="bg-white dark:bg-[#0c0c0f] border border-zinc-200 dark:border-zinc-800 hover:border-blue-500 dark:hover:border-blue-400 rounded-xl p-4 shadow-sm text-left transition-colors cursor-pointer"
+                  >
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 font-mono flex items-center gap-1">
+                      <History className="w-3.5 h-3.5" />
+                      Audit & Usage Logs
+                    </div>
+                    <div className="text-sm font-bold mt-1">View Posted Values & Images →</div>
+                    <div className="text-[11px] text-zinc-500">
+                      {auditHistory[0]?.created_at
+                        ? `Last run: ${new Date(auditHistory[0].created_at).toLocaleString()}`
+                        : 'No runs recorded yet'}
+                    </div>
+                  </button>
                 </div>
 
                 {/* Grid Layout: Context & Design Guide */}
@@ -1719,6 +1935,184 @@ function App() {
               </div>
             </div>
           </div>
+          )
+        )}
+
+        {/* ====================================================================== */}
+        {/* TAB 5: USER ACTIVITY, USAGE & DETECTOR AUDIT HISTORY */}
+        {/* ====================================================================== */}
+        {activeTab === 'history' && (
+          !user ? (
+            <AuthRequiredOverlay onLogin={handleGoogleLogin} />
+          ) : (
+            <div className="space-y-6 animate-fadeIn max-w-[1200px] mx-auto">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-2xl font-bold tracking-tight">Activity, Usage & Detector Logs</h2>
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                    Your Supabase-tracked account profile, detector usage counts, posted clinical values, and uploaded biopsy images.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => fetchUserTrackingData(user.id)}
+                  disabled={loadingHistory}
+                  className="flex items-center gap-2 px-3.5 py-2 border border-zinc-200 dark:border-zinc-800 rounded-lg bg-white dark:bg-[#0c0c0f] hover:bg-zinc-50 dark:hover:bg-zinc-900 text-xs font-semibold shadow-sm transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingHistory ? 'animate-spin' : ''}`} />
+                  Refresh Logs
+                </button>
+              </div>
+
+              {/* Account & Quota Summary */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="md:col-span-2 bg-white dark:bg-[#0c0c0f] border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 shadow-sm flex items-center gap-4">
+                  {user.user_metadata?.avatar_url ? (
+                    <img
+                      src={user.user_metadata.avatar_url}
+                      alt="Profile"
+                      className="w-12 h-12 rounded-full border border-zinc-200 dark:border-zinc-800"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-500">
+                      <User className="w-6 h-6" />
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <div className="text-sm font-bold truncate">
+                      {userUsage?.full_name || user.user_metadata?.full_name || 'Authenticated User'}
+                    </div>
+                    <div className="text-xs text-zinc-500 truncate">{userUsage?.user_email || user.email}</div>
+                    <div className="text-[10px] font-mono text-zinc-400 mt-1 truncate">
+                      ID: {user.id}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white dark:bg-[#0c0c0f] border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 shadow-sm">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">Total Detector Runs</div>
+                  <div className="text-3xl font-black text-blue-600 dark:text-blue-400 mt-1">
+                    {userUsage?.total_predictions ?? auditHistory.length}
+                  </div>
+                  <div className="text-[11px] text-zinc-500 mt-1">
+                    Last sign-in: {userUsage?.last_sign_in_at ? new Date(userUsage.last_sign_in_at).toLocaleString() : 'Active session'}
+                  </div>
+                </div>
+
+                <div className="bg-white dark:bg-[#0c0c0f] border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 shadow-sm">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">Image Classifier Runs</div>
+                  <div className="text-3xl font-black text-indigo-600 dark:text-indigo-400 mt-1">
+                    {userUsage?.image_predictions ?? 0}
+                  </div>
+                  <div className="text-[11px] text-zinc-500 mt-1">
+                    Last prediction: {userUsage?.last_prediction_at ? new Date(userUsage.last_prediction_at).toLocaleString() : 'None yet'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Audit Logs List */}
+              <div className="bg-white dark:bg-[#0c0c0f] border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-sm overflow-hidden">
+                <div className="px-5 py-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+                  <h3 className="text-sm font-bold tracking-tight">Recent Detector Executions ({auditHistory.length})</h3>
+                  <span className="text-[11px] text-zinc-400 font-mono">Click any row to inspect posted values or image</span>
+                </div>
+
+                {loadingHistory && auditHistory.length === 0 ? (
+                  <div className="p-10 text-center text-xs text-zinc-500">Loading your tracked activity from Supabase...</div>
+                ) : auditHistory.length === 0 ? (
+                  <div className="p-10 text-center space-y-2">
+                    <History className="w-8 h-8 mx-auto text-zinc-400" />
+                    <div className="text-sm font-semibold">No detector runs logged yet</div>
+                    <p className="text-xs text-zinc-500 max-w-md mx-auto">
+                      Run a prediction in Live Diagnosis or upload a slide in Image Classifier — your model, posted values, uploaded image, and outcome will appear here.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                    {auditHistory.map((log) => {
+                      const isExpanded = expandedLogId === log.id;
+                      const isHighRisk = ['Malignant', 'Dead', 'Malignant / High Risk'].includes(log.result);
+                      return (
+                        <div key={log.id} className="p-4 hover:bg-zinc-50/70 dark:hover:bg-zinc-900/30 transition-colors">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
+                            className="w-full flex flex-wrap items-center justify-between gap-3 text-left cursor-pointer"
+                          >
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-xs font-bold">{log.prediction_type}</span>
+                                {log.model_used && (
+                                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300">
+                                    {log.model_used}
+                                  </span>
+                                )}
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                  isHighRisk
+                                    ? 'bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300'
+                                    : 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
+                                }`}>
+                                  {log.result}{log.confidence != null ? ` (${log.confidence}%)` : ''}
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-zinc-500 font-mono">
+                                {new Date(log.created_at).toLocaleString()}
+                                {log.input_values?.filename ? ` • Image: ${log.input_values.filename}` : ''}
+                              </div>
+                            </div>
+                            <span className="text-zinc-400 flex items-center gap-1 text-xs">
+                              {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                            </span>
+                          </button>
+
+                          {isExpanded && (
+                            <div className="mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800 space-y-4">
+                              {(log.signed_image_url || log.image_url) && (
+                                <div className="space-y-2">
+                                  <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">Posted Biopsy Image</div>
+                                  <img
+                                    src={log.signed_image_url || log.image_url}
+                                    alt={log.input_values?.filename || 'Uploaded biopsy'}
+                                    className="max-h-56 rounded-lg border border-zinc-200 dark:border-zinc-800 object-contain bg-zinc-950/5"
+                                  />
+                                </div>
+                              )}
+
+                              {log.prediction_details?.probabilities && (
+                                <div className="space-y-1.5">
+                                  <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">Probability Breakdown</div>
+                                  <div className="flex flex-wrap gap-2">
+                                    {Object.entries(log.prediction_details.probabilities).map(([cls, pct]) => (
+                                      <span key={cls} className="text-xs font-mono px-2.5 py-1 rounded-md bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
+                                        {cls}: <strong>{pct}%</strong>
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {log.input_values && (
+                                <div className="space-y-2">
+                                  <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">Posted Input Values</div>
+                                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-64 overflow-y-auto p-3 rounded-lg bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-100 dark:border-zinc-800">
+                                    {Object.entries(log.input_values).map(([k, v]) => (
+                                      <div key={k} className="text-[11px] font-mono">
+                                        <span className="text-zinc-500 block truncate" title={k}>{k}</span>
+                                        <span className="font-bold">{typeof v === 'number' ? Number(v).toFixed(4).replace(/\.?0+$/, '') : String(v)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
           )
         )}
 
