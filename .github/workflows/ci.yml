@@ -55,6 +55,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt
+          pip install httpx httpx2
 
       - name: Run pytest suite
         # best_model.pth is gitignored; skip CNN image inference test when weights are absent
