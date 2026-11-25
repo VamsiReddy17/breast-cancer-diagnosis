@@ -77,36 +77,90 @@ const AuthRequiredOverlay = ({ onLogin }) => {
 
 function App() {
   // Supabase Auth States
-  const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [userUsage, setUserUsage] = useState(null);
+  const [allUsersUsage, setAllUsersUsage] = useState([]);
   const [auditHistory, setAuditHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [expandedLogId, setExpandedLogId] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [viewAllUsers, setViewAllUsers] = useState(false);
 
-  const fetchUserTrackingData = async (userId) => {
+  const checkAdminStatus = async (email) => {
+    if (!email) {
+      setIsAdmin(false);
+      return false;
+    }
+    try {
+      const { data, error } = await supabase
+        .from('admin_users')
+        .select('email')
+        .eq('email', email)
+        .maybeSingle();
+      const adminFlag = !error && Boolean(data?.email);
+      setIsAdmin(adminFlag);
+      return adminFlag;
+    } catch {
+      setIsAdmin(false);
+      return false;
+    }
+  };
+
+  const fetchUserTrackingData = async (userId, includeAll = viewAllUsers) => {
     if (!userId) return;
     setLoadingHistory(true);
     try {
-      const [{ data: usageData, error: usageError }, { data: logsData, error: logsError }] = await Promise.all([
+      const logsQuery = includeAll
+        ? supabase
+            .from('audit_logs')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(100)
+        : supabase
+            .from('audit_logs')
+            .select('*')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false })
+            .limit(50);
+
+      const requests = [
         supabase
           .from('user_usage')
           .select('*')
           .eq('user_id', userId)
           .maybeSingle(),
-        supabase
-          .from('audit_logs')
-          .select('*')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false })
-          .limit(50)
-      ]);
+        logsQuery
+      ];
+
+      if (includeAll) {
+        requests.push(
+          supabase
+            .from('user_usage')
+            .select('*')
+            .order('last_sign_in_at', { ascending: false })
+            .limit(100)
+        );
+      }
+
+      const [
+        { data: usageData, error: usageError },
+        { data: logsData, error: logsError },
+        allUsageRes
+      ] = await Promise.all(requests);
 
       if (usageError) {
         console.warn("Failed to load user usage:", usageError.message);
       } else {
         setUserUsage(usageData);
+      }
+
+      if (includeAll && allUsageRes) {
+        if (allUsageRes.error) {
+          console.warn("Failed to load all users usage:", allUsageRes.error.message);
+        } else {
+          setAllUsersUsage(allUsageRes.data || []);
+        }
       }
 
       if (logsError) {
@@ -137,7 +191,10 @@ function App() {
   const syncUserProfile = async (authUser) => {
     if (!authUser) {
       setUserUsage(null);
+      setAllUsersUsage([]);
       setAuditHistory([]);
+      setIsAdmin(false);
+      setViewAllUsers(false);
       return;
     }
     try {
@@ -161,13 +218,16 @@ function App() {
     } catch (err) {
       console.warn("User profile sync skipped:", err);
     }
-    await fetchUserTrackingData(authUser.id);
+    const adminFlag = await checkAdminStatus(authUser.email);
+    await fetchUserTrackingData(authUser.id, adminFlag);
+    if (adminFlag) {
+      setViewAllUsers(true);
+    }
   };
 
   // Subscribe to Auth state changes
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
       const authUser = session?.user ?? null;
       setUser(authUser);
       setAuthLoading(false);
@@ -175,7 +235,6 @@ function App() {
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
       const authUser = session?.user ?? null;
       setUser(authUser);
       setAuthLoading(false);
@@ -473,7 +532,15 @@ function App() {
       });
     } catch (err) {
       console.error("Prediction failed:", err);
-      setPredictionError(err.response?.data?.detail || "An unexpected error occurred during prediction.");
+      const errMsg = err.response?.data?.detail || "An unexpected error occurred during prediction.";
+      setPredictionError(errMsg);
+      logPredictionAudit({
+        predictionType: datasetMode === 'seer' ? 'SEER Clinical Prognosis' : 'Wisconsin Cytology Diagnosis',
+        modelUsed: predictorModel,
+        result: 'Prediction Failed',
+        inputValues: { ...features },
+        predictionDetails: { error: errMsg }
+      });
     } finally {
       setPredicting(false);
     }
@@ -498,6 +565,15 @@ function App() {
     setImagePredicting(true);
     setImageError(null);
     setImagePrediction(null);
+
+    // Always store the user's uploaded image in Supabase Storage first, even if inference fails
+    const { imagePath } = await uploadBiopsyImageToStorage(imageFile, user?.id);
+    const imageMeta = {
+      filename: imageFile.name,
+      size_bytes: imageFile.size,
+      mime_type: imageFile.type || 'image/unknown'
+    };
+
     try {
       const formData = new FormData();
       formData.append('file', imageFile);
@@ -505,24 +581,27 @@ function App() {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       setImagePrediction(response.data);
-      // Upload posted biopsy image to Supabase Storage and log full audit record
-      const { imagePath } = await uploadBiopsyImageToStorage(imageFile, user?.id);
       logPredictionAudit({
         predictionType: 'Histopathology Image Classification',
         modelUsed: response.data.model_used || 'EfficientNet-B0 CNN',
         result: response.data.class_label,
         confidence: response.data.confidence ?? null,
-        inputValues: {
-          filename: imageFile.name,
-          size_bytes: imageFile.size,
-          mime_type: imageFile.type || 'image/unknown'
-        },
+        inputValues: imageMeta,
         predictionDetails: response.data,
         imagePath
       });
     } catch (err) {
       console.error('Image prediction failed:', err);
-      setImageError(err.response?.data?.detail || 'An unexpected error occurred during image prediction.');
+      const errMsg = err.response?.data?.detail || 'An unexpected error occurred during image prediction.';
+      setImageError(errMsg);
+      logPredictionAudit({
+        predictionType: 'Histopathology Image Classification',
+        modelUsed: 'EfficientNet-B0 CNN',
+        result: 'Prediction Failed',
+        inputValues: imageMeta,
+        predictionDetails: { error: errMsg },
+        imagePath
+      });
     } finally {
       setImagePredicting(false);
     }
@@ -1950,19 +2029,96 @@ function App() {
                 <div>
                   <h2 className="text-2xl font-bold tracking-tight">Activity, Usage & Detector Logs</h2>
                   <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                    Your Supabase-tracked account profile, detector usage counts, posted clinical values, and uploaded biopsy images.
+                    {viewAllUsers && isAdmin
+                      ? 'Admin View: Inspect all signed-up users, posted clinical values, and uploaded biopsy images.'
+                      : 'Your Supabase-tracked account profile, detector usage counts, posted clinical values, and uploaded biopsy images.'}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => fetchUserTrackingData(user.id)}
-                  disabled={loadingHistory}
-                  className="flex items-center gap-2 px-3.5 py-2 border border-zinc-200 dark:border-zinc-800 rounded-lg bg-white dark:bg-[#0c0c0f] hover:bg-zinc-50 dark:hover:bg-zinc-900 text-xs font-semibold shadow-sm transition-colors disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${loadingHistory ? 'animate-spin' : ''}`} />
-                  Refresh Logs
-                </button>
+                <div className="flex items-center gap-2">
+                  {isAdmin && (
+                    <div className="flex items-center bg-zinc-100 dark:bg-[#16161c] p-1 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setViewAllUsers(false);
+                          fetchUserTrackingData(user.id, false);
+                        }}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                          !viewAllUsers
+                            ? 'bg-white dark:bg-zinc-800 text-blue-600 dark:text-blue-400 shadow-sm'
+                            : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200'
+                        }`}
+                      >
+                        My Activity
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setViewAllUsers(true);
+                          fetchUserTrackingData(user.id, true);
+                        }}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                          viewAllUsers
+                            ? 'bg-white dark:bg-zinc-800 text-blue-600 dark:text-blue-400 shadow-sm'
+                            : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200'
+                        }`}
+                      >
+                        All Users (Admin)
+                      </button>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => fetchUserTrackingData(user.id, viewAllUsers)}
+                    disabled={loadingHistory}
+                    className="flex items-center gap-2 px-3.5 py-2 border border-zinc-200 dark:border-zinc-800 rounded-lg bg-white dark:bg-[#0c0c0f] hover:bg-zinc-50 dark:hover:bg-zinc-900 text-xs font-semibold shadow-sm transition-colors disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${loadingHistory ? 'animate-spin' : ''}`} />
+                    Refresh Logs
+                  </button>
+                </div>
               </div>
+
+              {/* Admin: All Signed-Up Users Table */}
+              {viewAllUsers && isAdmin && (
+                <div className="bg-white dark:bg-[#0c0c0f] border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-sm overflow-hidden">
+                  <div className="px-5 py-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+                    <h3 className="text-sm font-bold tracking-tight">Registered Users & Usage ({allUsersUsage.length})</h3>
+                    <span className="text-[11px] text-zinc-400 font-mono">Admin view enabled via public.admin_users</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-zinc-100 dark:border-zinc-800 text-[10px] uppercase tracking-wider text-zinc-400 font-mono">
+                          <th className="py-3 px-4">User</th>
+                          <th className="py-3 px-4">Total Runs</th>
+                          <th className="py-3 px-4">Images</th>
+                          <th className="py-3 px-4">Last Sign-In</th>
+                          <th className="py-3 px-4">Last Prediction</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                        {allUsersUsage.map((u) => (
+                          <tr key={u.user_id} className="hover:bg-zinc-50/70 dark:hover:bg-zinc-900/30">
+                            <td className="py-3 px-4">
+                              <div className="font-bold">{u.full_name || '—'}</div>
+                              <div className="text-[11px] text-zinc-500 font-mono">{u.user_email}</div>
+                            </td>
+                            <td className="py-3 px-4 font-bold text-blue-600 dark:text-blue-400">{u.total_predictions}</td>
+                            <td className="py-3 px-4 font-bold text-indigo-600 dark:text-indigo-400">{u.image_predictions}</td>
+                            <td className="py-3 px-4 text-[11px] text-zinc-500 font-mono">
+                              {u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString() : '—'}
+                            </td>
+                            <td className="py-3 px-4 text-[11px] text-zinc-500 font-mono">
+                              {u.last_prediction_at ? new Date(u.last_prediction_at).toLocaleString() : 'None yet'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
 
               {/* Account & Quota Summary */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -2031,6 +2187,7 @@ function App() {
                   <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
                     {auditHistory.map((log) => {
                       const isExpanded = expandedLogId === log.id;
+                      const isFailed = log.result === 'Prediction Failed';
                       const isHighRisk = ['Malignant', 'Dead', 'Malignant / High Risk'].includes(log.result);
                       return (
                         <div key={log.id} className="p-4 hover:bg-zinc-50/70 dark:hover:bg-zinc-900/30 transition-colors">
@@ -2048,14 +2205,17 @@ function App() {
                                   </span>
                                 )}
                                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                  isHighRisk
-                                    ? 'bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300'
-                                    : 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
+                                  isFailed
+                                    ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300'
+                                    : isHighRisk
+                                      ? 'bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300'
+                                      : 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
                                 }`}>
                                   {log.result}{log.confidence != null ? ` (${log.confidence}%)` : ''}
                                 </span>
                               </div>
                               <div className="text-[11px] text-zinc-500 font-mono">
+                                {viewAllUsers && isAdmin && log.user_email ? `${log.user_email} • ` : ''}
                                 {new Date(log.created_at).toLocaleString()}
                                 {log.input_values?.filename ? ` • Image: ${log.input_values.filename}` : ''}
                               </div>
